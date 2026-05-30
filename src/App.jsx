@@ -79,16 +79,11 @@ function getEnemy(round) {
   return ENEMIES[(round - 1) % ENEMIES.length];
 }
 
-// ── 공통 스타일 ──
 const rankColor = i => i===0?"#fbbf24":i===1?"#d1d5db":i===2?"#cd7f32":"#9ca3af";
 
-function RankRow({ rank, entry, highlight }) {
+function RankRow({ rank, entry }) {
   return (
-    <div style={{
-      display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:8,
-      background: highlight ? "rgba(192,132,252,0.15)" : "transparent",
-      border: highlight ? "1px solid rgba(192,132,252,0.4)" : "1px solid transparent",
-    }}>
+    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:8 }}>
       <span style={{ color: rankColor(rank-1), fontWeight:"bold", width:32, fontSize:13 }}>{rank}등</span>
       <span style={{ flex:1, color:"#fff", fontWeight:"bold", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{entry.nickname}</span>
       <span style={{ color:"#fbbf24", fontWeight:"bold", fontSize:13 }}>{entry.score}점</span>
@@ -97,22 +92,42 @@ function RankRow({ rank, entry, highlight }) {
   );
 }
 
+function DiffTabs({ active, onChange }) {
+  return (
+    <div style={{ display:"flex", gap:4, marginBottom:12 }}>
+      {Object.entries(DIFFICULTIES).map(([key, d]) => (
+        <button key={key} onClick={() => onChange(key)} style={{
+          flex:1, padding:"7px 0", borderRadius:8, border:"none",
+          background: active===key ? d.color : "rgba(255,255,255,0.07)",
+          color: active===key ? "#fff" : "#9ca3af",
+          fontWeight:"bold", fontSize:12, cursor:"pointer", transition:"all 0.2s",
+        }}>
+          {d.emoji} {d.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
-  // screen: "select" | "game" | "rankings"
   const [screen, setScreen] = useState("select");
   const [difficulty, setDifficulty] = useState(null);
-  const [top10, setTop10] = useState([]);
   const [showRules, setShowRules] = useState(false);
 
-  // 전체 랭킹 화면
+  // 랭킹
+  const [top10, setTop10] = useState([]);
+  const [top10Tab, setTop10Tab] = useState("easy");
   const [allRankings, setAllRankings] = useState([]);
+  const [rankingsTab, setRankingsTab] = useState("easy");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [rankingsError, setRankingsError] = useState(null);
   const [submitError, setSubmitError] = useState(null);
+  const [preRank, setPreRank] = useState(null);
+  const [preRankLoading, setPreRankLoading] = useState(false);
   const searchDebounceRef = useRef(null);
 
-  // Game state
+  // 게임 상태
   const [round, setRound] = useState(1);
   const [enemyMaxHp, setEnemyMaxHp] = useState(50);
   const [enemyHp, setEnemyHp] = useState(50);
@@ -133,41 +148,58 @@ export default function App() {
   // 닉네임
   const [nickname, setNickname] = useState("");
   const [nicknameSubmitted, setNicknameSubmitted] = useState(false);
+  const [registrationSkipped, setRegistrationSkipped] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { fetchTop10(); }, []);
+  const registrationDecided = nicknameSubmitted || registrationSkipped;
 
-  async function fetchTop10() {
+  useEffect(() => { fetchTop10("easy"); }, []);
+
+  async function fetchTop10(tab) {
     const { data, error } = await supabase
-      .from("rankings")
-      .select("*")
-      .order("score", { ascending: false })
-      .limit(10);
+      .from("rankings").select("*").eq("difficulty", tab)
+      .order("score", { ascending: false }).limit(10);
     if (error) console.error("TOP10 로드 실패:", error.message);
     if (data) setTop10(data);
+  }
+
+  async function handleTop10Tab(tab) {
+    setTop10Tab(tab);
+    fetchTop10(tab);
+  }
+
+  async function fetchPreRank(scoreVal, diff) {
+    setPreRankLoading(true);
+    const finalScore = Math.round(scoreVal * 100) / 100;
+    const { count } = await supabase
+      .from("rankings").select("*", { count: "exact", head: true })
+      .eq("difficulty", diff).gt("score", finalScore);
+    setPreRank((count ?? 0) + 1);
+    setPreRankLoading(false);
   }
 
   async function openRankings() {
     setScreen("rankings");
     setSearchQuery("");
     setRankingsError(null);
-    const { data, error } = await supabase
-      .from("rankings")
-      .select("*")
-      .order("score", { ascending: false })
-      .limit(100);
-    if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
-    if (data) setAllRankings(data);
+    setRankingsTab("easy");
+    fetchRankingList("", "easy");
   }
 
-  async function fetchRankingList(query) {
+  async function handleRankingsTab(tab) {
+    setRankingsTab(tab);
+    setSearchQuery("");
+    fetchRankingList("", tab);
+  }
+
+  async function fetchRankingList(query, tab) {
     setSearchLoading(true);
     setRankingsError(null);
-    const req = query.trim() === ""
-      ? supabase.from("rankings").select("*").order("score", { ascending: false }).limit(100)
-      : supabase.from("rankings").select("*").ilike("nickname", `%${query.trim()}%`).order("score", { ascending: false }).limit(100);
+    let req = supabase.from("rankings").select("*")
+      .eq("difficulty", tab).order("score", { ascending: false }).limit(100);
+    if (query.trim() !== "") req = req.ilike("nickname", `%${query.trim()}%`);
     const { data, error } = await req;
-    if (error) setRankingsError("검색 중 오류가 발생했습니다. 다시 시도해주세요.");
+    if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
     if (data) setAllRankings(data);
     setSearchLoading(false);
   }
@@ -175,7 +207,7 @@ export default function App() {
   function handleSearch(query) {
     setSearchQuery(query);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => fetchRankingList(query), 300);
+    searchDebounceRef.current = setTimeout(() => fetchRankingList(query, rankingsTab), 300);
   }
 
   async function submitScore(currentTotalScore) {
@@ -184,10 +216,7 @@ export default function App() {
     setSubmitError(null);
     const finalScore = Math.round(currentTotalScore * 100) / 100;
     const { error: insertError } = await supabase.from("rankings").insert([{
-      nickname: nickname.trim(),
-      score: finalScore,
-      difficulty,
-      round,
+      nickname: nickname.trim(), score: finalScore, difficulty, round,
     }]);
     if (insertError) {
       setSubmitError("등록에 실패했습니다. 다시 시도해주세요.");
@@ -195,22 +224,18 @@ export default function App() {
       return;
     }
     const { data, error: fetchError } = await supabase
-      .from("rankings")
-      .select("*")
-      .order("score", { ascending: false })
-      .limit(100);
+      .from("rankings").select("*").eq("difficulty", difficulty)
+      .order("score", { ascending: false }).limit(100);
     if (fetchError) {
       setSubmitError("순위를 불러오지 못했습니다.");
       setSubmitting(false);
       return;
     }
     if (data) {
-      const myRank = data.findIndex(r =>
-        r.nickname === nickname.trim() && r.score === finalScore
-      ) + 1;
+      const myRank = data.findIndex(r => r.nickname === nickname.trim() && r.score === finalScore) + 1;
       setFinalRank(myRank || null);
     }
-    await fetchTop10();
+    fetchTop10(top10Tab);
     setNicknameSubmitted(true);
     setSubmitting(false);
   }
@@ -225,7 +250,8 @@ export default function App() {
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
     setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
-    setNickname(""); setNicknameSubmitted(false); setSubmitting(false);
+    setNickname(""); setNicknameSubmitted(false); setRegistrationSkipped(false);
+    setSubmitting(false); setPreRank(null);
     setScreen("game");
   }
 
@@ -237,6 +263,13 @@ export default function App() {
   function addCard(h, r) {
     if (h.length >= maxHandSize(r)) return h;
     return [...h, genCard(h)];
+  }
+
+  function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, isTurnLimit = false) {
+    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: isTurnLimit });
+    setTotalScore(newTS);
+    setPhase("gameover");
+    fetchPreRank(newTS, currentDiff);
   }
 
   function endTurn(skip = false) {
@@ -262,10 +295,15 @@ export default function App() {
         const isGO = fs <= thresh;
         const newTS = totalScore + fs;
         const newRS = [...roundScores, { round, score: fs, perfect }];
-        setScore({ base, perfect, finalScore: fs, turnCount: turn, maxD: newMax, isGameOver: isGO, thresh, newTS });
+        setScore({ base, perfect, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
         setTotalScore(newTS);
         setRoundScores(newRS);
-        setPhase(isGO ? "gameover" : "result");
+        if (isGO) {
+          setPhase("gameover");
+          fetchPreRank(newTS, difficulty);
+        } else {
+          setPhase("result");
+        }
         return;
       }
       const usedIds = new Set(selected.map(c=>c.id));
@@ -274,8 +312,15 @@ export default function App() {
       setLog(prev=>[`💤 턴${turn}: 턴 넘김`, ...prev.slice(0,4)]);
     }
     setSelected([]);
+
+    const nextTurn = turn + 1;
+    if (nextTurn > round * 5) {
+      const thresh = DIFFICULTIES[difficulty].threshold(round);
+      triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
+      return;
+    }
     setHand(addCard(newHand, round));
-    setTurn(t=>t+1);
+    setTurn(nextTurn);
   }
 
   function nextRound() {
@@ -296,30 +341,28 @@ export default function App() {
     return (
       <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"24px 16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
         <div style={{ width:"100%", maxWidth:400 }}>
-          {/* 헤더 */}
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
             <button onClick={()=>setScreen("select")} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#fff", padding:"6px 14px", cursor:"pointer", fontSize:13 }}>← 뒤로</button>
             <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc" }}>🏅 전체 랭킹</div>
           </div>
 
-          {/* 검색창 */}
+          <DiffTabs active={rankingsTab} onChange={handleRankingsTab} />
+
           <input
             value={searchQuery}
             onChange={e => handleSearch(e.target.value)}
             placeholder="닉네임 검색..."
-            style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:16, boxSizing:"border-box" }}
+            style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:12, boxSizing:"border-box" }}
           />
 
-          {/* 결과 수 / 에러 */}
           {rankingsError
             ? <div style={{ color:"#f87171", fontSize:13, marginBottom:10, padding:"10px 14px", background:"rgba(239,68,68,0.1)", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)" }}>{rankingsError}</div>
             : <div style={{ fontSize:12, color:"#6b7280", marginBottom:10 }}>{searchLoading ? "검색 중..." : `${allRankings.length}명 표시 중 (최대 100명)`}</div>
           }
 
-          {/* 랭킹 목록 */}
           <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
             {allRankings.map((entry, i) => (
-              <RankRow key={entry.id} rank={i+1} entry={entry} highlight={false} />
+              <RankRow key={entry.id} rank={i+1} entry={entry} />
             ))}
             {allRankings.length === 0 && !searchLoading && !rankingsError && (
               <div style={{ color:"#6b7280", textAlign:"center", padding:"40px 0" }}>검색 결과가 없습니다</div>
@@ -330,7 +373,7 @@ export default function App() {
     );
   }
 
-  // ── 메인(선택) 화면 ──
+  // ── 메인 화면 ──
   if (screen === "select") {
     return (
       <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
@@ -343,8 +386,7 @@ export default function App() {
         {Object.entries(DIFFICULTIES).map(([key, d]) => (
           <button key={key} onClick={()=>startGame(key)} style={{
             width:260, marginBottom:14, padding:"18px 0", borderRadius:16, border:`2px solid ${d.color}`,
-            background:"rgba(0,0,0,0.3)", color:"#fff", fontSize:17, fontWeight:"bold", cursor:"pointer",
-            transition:"all 0.2s",
+            background:"rgba(0,0,0,0.3)", color:"#fff", fontSize:17, fontWeight:"bold", cursor:"pointer", transition:"all 0.2s",
           }}
           onMouseOver={e=>e.currentTarget.style.background=`${d.color}33`}
           onMouseOut={e=>e.currentTarget.style.background="rgba(0,0,0,0.3)"}
@@ -358,33 +400,21 @@ export default function App() {
         ))}
 
         {/* TOP 10 */}
-        {top10.length > 0 && (
-          <div style={{ marginTop:24, width:260, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 TOP 10</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-              {top10.map((r, i) => (
-                <RankRow key={r.id} rank={i+1} entry={r} highlight={false} />
-              ))}
-            </div>
-            <button onClick={openRankings} style={{
-              marginTop:12, width:"100%", padding:"8px 0", borderRadius:10,
-              border:"1px solid rgba(192,132,252,0.4)", background:"rgba(192,132,252,0.1)",
-              color:"#c084fc", fontSize:13, fontWeight:"bold", cursor:"pointer",
-            }}>
-              전체 랭킹 보기 →
-            </button>
+        <div style={{ marginTop:24, width:280, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 TOP 10</div>
+          <DiffTabs active={top10Tab} onChange={handleTop10Tab} />
+          <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+            {top10.length > 0
+              ? top10.map((r, i) => <RankRow key={r.id} rank={i+1} entry={r} />)
+              : <div style={{ color:"#6b7280", fontSize:12, textAlign:"center", padding:"12px 0" }}>아직 기록이 없습니다</div>
+            }
           </div>
-        )}
-
-        {top10.length === 0 && (
           <button onClick={openRankings} style={{
-            marginTop:16, padding:"8px 20px", borderRadius:10,
+            marginTop:12, width:"100%", padding:"8px 0", borderRadius:10,
             border:"1px solid rgba(192,132,252,0.4)", background:"rgba(192,132,252,0.1)",
             color:"#c084fc", fontSize:13, fontWeight:"bold", cursor:"pointer",
-          }}>
-            전체 랭킹 보기 →
-          </button>
-        )}
+          }}>전체 랭킹 보기 →</button>
+        </div>
 
         {/* 규칙 팝업 */}
         {showRules && (
@@ -394,59 +424,14 @@ export default function App() {
                 <div style={{ fontSize:17, fontWeight:"bold", color:"#c084fc" }}>📖 게임 규칙</div>
                 <button onClick={()=>setShowRules(false)} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#9ca3af", padding:"4px 10px", cursor:"pointer", fontSize:13 }}>✕ 닫기</button>
               </div>
-
               {[
-                {
-                  emoji:"⚔️", title:"기본 진행",
-                  items:[
-                    "손패에서 카드를 선택해 수식을 만들고 공격",
-                    "적의 HP를 0으로 만들면 라운드 클리어",
-                    "공격 후 사용한 카드는 사라지고 매 턴 카드 1장 추가",
-                    "카드를 쓰기 싫으면 '턴 종료'로 넘길 수 있음",
-                  ]
-                },
-                {
-                  emoji:"🃏", title:"수식 규칙",
-                  items:[
-                    "숫자와 연산자를 번갈아 선택 (숫자→연산→숫자→...)",
-                    "첫 카드와 마지막 카드는 반드시 숫자",
-                    "결과가 0 이하면 공격 불가",
-                  ]
-                },
-                {
-                  emoji:"✨", title:"제곱 메커니즘",
-                  items:[
-                    "같은 숫자 3장을 연속 선택하면 제곱으로 변환",
-                    "예: 3 3 3 → 3² = 9",
-                    "예: 9 9 9 → 9² = 81",
-                  ]
-                },
-                {
-                  emoji:"🏆", title:"점수 계산",
-                  items:[
-                    "라운드 점수 = 최고 데미지 ÷ 클리어 턴",
-                    "적 HP를 딱 맞게 0으로 → 퍼펙트 클리어! 점수 ×2",
-                    "총점 = 각 라운드 점수의 합",
-                  ]
-                },
-                {
-                  emoji:"💀", title:"게임오버 조건",
-                  items:[
-                    "라운드 점수가 기준 이하면 게임오버",
-                    "이지: 기준 = 라운드 수",
-                    "노말: 기준 = 라운드 × 2",
-                    "하드: 기준 = 라운드²",
-                  ]
-                },
-                {
-                  emoji:"🃏", title:"손패 최대 크기",
-                  items:[
-                    "R1~2: 7장",
-                    "R3~4: 8장",
-                    "R5~6: 9장",
-                    "R7~: 10장",
-                  ]
-                },
+                { emoji:"⚔️", title:"기본 진행", items:["손패에서 카드를 선택해 수식을 만들고 공격","적의 HP를 0으로 만들면 라운드 클리어","공격 후 사용한 카드는 사라지고 매 턴 카드 1장 추가","카드를 쓰기 싫으면 '턴 종료'로 넘길 수 있음"] },
+                { emoji:"⏱️", title:"턴 제한", items:["라운드당 최대 턴 수 = 라운드 × 5","턴 초과 시 자동으로 게임 오버"] },
+                { emoji:"🃏", title:"수식 규칙", items:["숫자와 연산자를 번갈아 선택 (숫자→연산→숫자→...)","첫 카드와 마지막 카드는 반드시 숫자","결과가 0 이하면 공격 불가"] },
+                { emoji:"✨", title:"제곱 메커니즘", items:["같은 숫자 3장을 연속 선택하면 제곱으로 변환","예: 3 3 3 → 3² = 9","예: 9 9 9 → 9² = 81"] },
+                { emoji:"🏆", title:"점수 계산", items:["라운드 점수 = 최고 데미지 ÷ 클리어 턴","적 HP를 딱 맞게 0으로 → 퍼펙트 클리어! 점수 ×2","총점 = 각 라운드 점수의 합"] },
+                { emoji:"💀", title:"게임오버 조건", items:["라운드 점수가 기준 이하면 게임오버","이지: 기준 = 라운드 수","노말: 기준 = 라운드 × 2","하드: 기준 = 라운드²"] },
+                { emoji:"🃏", title:"손패 최대 크기", items:["R1~2: 7장","R3~4: 8장","R5~6: 9장","R7~: 10장"] },
               ].map(section => (
                 <div key={section.title} style={{ marginBottom:16 }}>
                   <div style={{ color:"#a78bfa", fontWeight:"bold", fontSize:13, marginBottom:6 }}>{section.emoji} {section.title}</div>
@@ -467,7 +452,7 @@ export default function App() {
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
 
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인</button>
+        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(top10Tab); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인</button>
         <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
         <div style={{ width:60 }} />
       </div>
@@ -476,7 +461,7 @@ export default function App() {
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
         <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
-        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}</span>
+        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{round*5}</span>
         <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
         <span style={{ background:"#92400e", borderRadius:20, padding:"3px 10px", fontSize:12 }}>💰 {totalScore.toFixed(2)}점</span>
       </div>
@@ -500,7 +485,7 @@ export default function App() {
 
       {/* Enemy */}
       <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:100, height:100, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
+        <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
         <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
         <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
           <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
@@ -571,42 +556,57 @@ export default function App() {
 
       {/* Result / Gameover overlay */}
       {(phase==="result"||phase==="gameover") && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.82)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}>
-          <div style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%" }}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.82)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16, overflowY:"auto" }}>
+          <div style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%", margin:"auto" }}>
 
+            {/* 헤더 */}
             {phase==="gameover"
               ? <>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:6 }}>
                     <div style={{ fontSize:36 }}>💀</div>
-                    <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:80, height:80, objectFit:"contain" }} />
+                    <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:100, height:100, objectFit:"contain" }} />
                   </div>
                   <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
-                  <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>R{round} 점수 {score?.finalScore.toFixed(2)}점 — 기준 {score?.thresh}점 미달</div>
+                  <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
+                    {score?.turnLimitExceeded ? `R${round} 턴 초과 (${round*5}턴)` : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
+                  </div>
                 </>
               : <>
-                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:120, height:120, objectFit:"contain", marginBottom:4 }} />
+                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:150, height:150, objectFit:"contain", marginBottom:4 }} />
                   <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div>
                 </>
             }
 
-            {/* 점수 요약 */}
-            <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:10, padding:"10px 14px", fontSize:12, lineHeight:2, marginBottom:12, textAlign:"left" }}>
-              <div>⏱️ 클리어 턴: <strong style={{ color:"#fff" }}>{score?.turnCount}턴</strong></div>
-              <div>💥 최고 데미지: <strong style={{ color:"#fbbf24" }}>{score?.maxD}</strong></div>
-              <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#9ca3af" }}>📊 점수 계산</div>
-              <div>{score?.maxD} ÷ {score?.turnCount} = <strong style={{ color:"#fff" }}>{score?.base}</strong></div>
-              {score?.perfect && <div style={{ color:"#4ade80" }}>✨ 퍼펙트 클리어! × 2</div>}
-              <div>🏆 라운드 점수: <strong style={{ color:score?.perfect?"#4ade80":"#c084fc", fontSize:16 }}>{score?.finalScore.toFixed(2)}</strong>
-                {phase==="gameover"&&<span style={{ color:"#f87171", fontSize:11 }}> (기준 {score?.thresh}점 미달)</span>}
+            {/* 점수 요약 (result에만) */}
+            {phase==="result" && (
+              <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:10, padding:"10px 14px", fontSize:12, lineHeight:2, marginBottom:12, textAlign:"left" }}>
+                <div>⏱️ 클리어 턴: <strong style={{ color:"#fff" }}>{score?.turnCount}턴</strong></div>
+                <div>💥 최고 데미지: <strong style={{ color:"#fbbf24" }}>{score?.maxD}</strong></div>
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#9ca3af" }}>📊 점수 계산</div>
+                <div>{score?.maxD} ÷ {score?.turnCount} = <strong style={{ color:"#fff" }}>{score?.base}</strong></div>
+                {score?.perfect && <div style={{ color:"#4ade80" }}>✨ 퍼펙트 클리어! × 2</div>}
+                <div>🏆 라운드 점수: <strong style={{ color:score?.perfect?"#4ade80":"#c084fc", fontSize:16 }}>{score?.finalScore?.toFixed(2)}</strong></div>
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}>
+                  💰 최종 총점: <strong style={{ color:"#fbbf24", fontSize:16 }}>{score?.newTS?.toFixed(2)}점</strong>
+                </div>
               </div>
-              <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}>
-                💰 최종 총점: <strong style={{ color:"#fbbf24", fontSize:16 }}>{score?.newTS?.toFixed(2)}점</strong>
-              </div>
-            </div>
+            )}
 
-            {/* 게임오버: 닉네임 입력 */}
-            {phase==="gameover" && !nicknameSubmitted && (
+            {/* 게임오버: 현재 순위 + 닉네임 등록 */}
+            {phase==="gameover" && !registrationDecided && (
               <div style={{ marginBottom:12 }}>
+                {/* 현재 순위 */}
+                <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, padding:"12px", marginBottom:12 }}>
+                  <div style={{ color:"#9ca3af", fontSize:12, marginBottom:4 }}>총점 {score?.newTS?.toFixed(2)}점의 현재 순위</div>
+                  {preRankLoading
+                    ? <div style={{ color:"#6b7280", fontSize:14 }}>순위 확인 중...</div>
+                    : <div style={{ fontSize:28, fontWeight:"bold", color: preRank<=3?"#fbbf24":preRank<=10?"#c084fc":"#fff" }}>
+                        {DIFFICULTIES[difficulty].label} {preRank}위
+                      </div>
+                  }
+                </div>
+
+                {/* 닉네임 입력 */}
                 <div style={{ color:"#fbbf24", fontSize:13, fontWeight:"bold", marginBottom:8 }}>🏅 랭킹에 이름을 남기세요</div>
                 <input
                   value={nickname}
@@ -616,52 +616,62 @@ export default function App() {
                   maxLength={12}
                   style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:8, boxSizing:"border-box" }}
                 />
-                <button onClick={() => submitScore(score?.newTS ?? totalScore)} disabled={!nickname.trim() || submitting} style={{
-                  width:"100%", padding:"10px 0", borderRadius:20, border:"none",
-                  background: nickname.trim()&&!submitting ? "linear-gradient(135deg,#d97706,#f59e0b)" : "rgba(255,255,255,0.1)",
-                  color:"#fff", fontSize:14, fontWeight:"bold", cursor: nickname.trim()&&!submitting ? "pointer":"not-allowed",
-                }}>
-                  {submitting ? "등록 중..." : "🏅 랭킹 등록"}
-                </button>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => submitScore(score?.newTS ?? totalScore)} disabled={!nickname.trim() || submitting} style={{
+                    flex:1, padding:"10px 0", borderRadius:20, border:"none",
+                    background: nickname.trim()&&!submitting ? "linear-gradient(135deg,#d97706,#f59e0b)" : "rgba(255,255,255,0.1)",
+                    color:"#fff", fontSize:13, fontWeight:"bold", cursor: nickname.trim()&&!submitting ? "pointer":"not-allowed",
+                  }}>
+                    {submitting ? "등록 중..." : "🏅 등록"}
+                  </button>
+                  <button onClick={() => setRegistrationSkipped(true)} style={{
+                    flex:1, padding:"10px 0", borderRadius:20, border:"1px solid rgba(255,255,255,0.2)",
+                    background:"rgba(255,255,255,0.07)", color:"#9ca3af", fontSize:13, fontWeight:"bold", cursor:"pointer",
+                  }}>
+                    등록 안하기
+                  </button>
+                </div>
                 {submitError && (
-                  <div style={{ marginTop:8, color:"#f87171", fontSize:12, padding:"8px", background:"rgba(239,68,68,0.1)", borderRadius:8, border:"1px solid rgba(239,68,68,0.3)" }}>{submitError}</div>
+                  <div style={{ marginTop:8, color:"#f87171", fontSize:12, padding:"8px", background:"rgba(239,68,68,0.1)", borderRadius:8 }}>{submitError}</div>
                 )}
               </div>
             )}
 
-            {/* 게임오버: 등록 완료 → 내 순위만 표시 */}
+            {/* 게임오버: 등록 완료 후 순위 표시 */}
             {phase==="gameover" && nicknameSubmitted && (
               <div style={{ marginBottom:16 }}>
-                {finalRank ? (
-                  <div style={{ padding:"16px", background:"rgba(0,0,0,0.3)", borderRadius:12 }}>
-                    <div style={{ color:"#9ca3af", fontSize:12, marginBottom:4 }}>내 최종 순위</div>
-                    <div style={{ fontSize:36, fontWeight:"bold", color: finalRank<=3?"#fbbf24":finalRank<=10?"#c084fc":"#fff" }}>
-                      {finalRank}위
+                {finalRank
+                  ? <div style={{ padding:"12px", background:"rgba(0,0,0,0.3)", borderRadius:12 }}>
+                      <div style={{ color:"#9ca3af", fontSize:12, marginBottom:4 }}>내 최종 순위</div>
+                      <div style={{ fontSize:32, fontWeight:"bold", color: finalRank<=3?"#fbbf24":finalRank<=10?"#c084fc":"#fff" }}>{finalRank}위</div>
+                      <div style={{ color:"#6b7280", fontSize:12, marginTop:4 }}>{nickname} · {score?.newTS?.toFixed(2)}점</div>
                     </div>
-                    <div style={{ color:"#6b7280", fontSize:12, marginTop:4 }}>{nickname} · {(score?.newTS ?? totalScore).toFixed(2)}점</div>
-                  </div>
-                ) : (
-                  <div style={{ color:"#9ca3af", fontSize:13 }}>랭킹 등록 완료!</div>
-                )}
+                  : <div style={{ color:"#9ca3af", fontSize:13 }}>랭킹 등록 완료!</div>
+                }
               </div>
             )}
 
-            {/* 다음 라운드 버튼 */}
+            {/* 등록 안하기 선택 시 */}
+            {phase==="gameover" && registrationSkipped && (
+              <div style={{ marginBottom:16, color:"#6b7280", fontSize:13 }}>등록하지 않았습니다</div>
+            )}
+
+            {/* 다음 라운드 / 메인·재시작 버튼 */}
             {phase==="result" && (
-              <div style={{ fontSize:11, color:"#6b7280", marginBottom:12 }}>
-                다음 기준: {DIFFICULTIES[difficulty].threshold(round+1)}점 · 적 HP: {Math.floor(50*Math.pow(1.5,round))}
-              </div>
+              <>
+                <div style={{ fontSize:11, color:"#6b7280", marginBottom:12 }}>
+                  다음 기준: {DIFFICULTIES[difficulty].threshold(round+1)}점 · 적 HP: {Math.floor(50*Math.pow(1.5,round))}
+                </div>
+                <button onClick={nextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
+              </>
             )}
 
-            {phase==="result"
-              ? <button onClick={nextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
-              : (nicknameSubmitted || phase!=="gameover") && (
-                  <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-                    <button onClick={()=>startGame(difficulty)} style={{ padding:"10px 18px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🔄 재도전</button>
-                    <button onClick={()=>{ fetchTop10(); setScreen("select"); }} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메뉴</button>
-                  </div>
-                )
-            }
+            {phase==="gameover" && registrationDecided && (
+              <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
+                <button onClick={()=>startGame(difficulty)} style={{ padding:"10px 18px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🔄 재도전</button>
+                <button onClick={()=>{ fetchTop10(top10Tab); setScreen("select"); }} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메뉴</button>
+              </div>
+            )}
           </div>
         </div>
       )}
