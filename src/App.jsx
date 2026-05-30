@@ -6,7 +6,7 @@ const OPS = ["+", "-", "×", "÷"];
 const DIFFICULTIES = {
   easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r },
   normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 2 },
-  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * 3 },
+  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r },
 };
 
 function randInt(min, max) {
@@ -337,7 +337,7 @@ export default function App() {
             <div style={{ fontSize:28, marginBottom:4 }}>{d.emoji}</div>
             <div style={{ color: d.color }}>{d.label}</div>
             <div style={{ fontSize:12, color:"#9ca3af", marginTop:4 }}>
-              {key==="easy" ? "라운드 수 이하 → 게임오버" : key==="normal" ? "라운드×2 이하 → 게임오버" : "라운드×3 이하 → 게임오버"}
+              {key==="easy" ? "라운드 수 이하 → 게임오버" : key==="normal" ? "라운드×2 이하 → 게임오버" : "라운드² 이하 → 게임오버"}
             </div>
           </button>
         ))}
@@ -378,7 +378,11 @@ export default function App() {
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
 
-      <div style={{ fontSize:18, fontWeight:"bold", marginBottom:10, color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
+      <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인</button>
+        <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
+        <div style={{ width:60 }} />
+      </div>
 
       {/* Status bar */}
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
