@@ -1,6 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 
+const _sk = atob('bWNiX2dhbWVfdjE=');
+function _hash(score, round, diff, elapsed) {
+  const raw = [score, round, diff, elapsed, _sk].join('\x00');
+  let a = 0x811c9dc5, b = 0xdeadbeef;
+  for (let i = 0; i < raw.length; i++) {
+    a ^= raw.charCodeAt(i);
+    a = Math.imul(a, 0x01000193) >>> 0;
+    b = (Math.imul(b ^ raw.charCodeAt(i), 0x9e3779b9)) >>> 0;
+  }
+  return ((a ^ b) >>> 0).toString(16).padStart(8, '0');
+}
+
 const OPS = ["+", "-", "×", "÷"];
 
 const DIFFICULTIES = {
@@ -128,6 +140,7 @@ export default function App() {
   const [preRank, setPreRank] = useState(null);
   const [preRankLoading, setPreRankLoading] = useState(false);
   const searchDebounceRef = useRef(null);
+  const roundStartTime = useRef(null);
 
   // 게임 상태
   const [round, setRound] = useState(1);
@@ -214,11 +227,17 @@ export default function App() {
 
   async function submitScore(currentTotalScore) {
     if (!nickname.trim() || submitting) return;
+    if (score?.elapsed < score?.minElapsed) {
+      setSubmitError("유효하지 않은 기록입니다.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     const finalScore = Math.round(currentTotalScore * 100) / 100;
     const { error: insertError } = await supabase.from("rankings").insert([{
       nickname: nickname.trim(), score: finalScore, difficulty, round,
+      elapsed_seconds: score?.elapsed ?? 0,
+      hash: score?.scoreHash ?? '',
     }]);
     if (insertError) {
       setSubmitError("등록에 실패했습니다. 다시 시도해주세요.");
@@ -254,6 +273,7 @@ export default function App() {
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
     setNickname(""); setNicknameSubmitted(false); setRegistrationSkipped(false);
     setSubmitting(false); setPreRank(null);
+    roundStartTime.current = Date.now();
     setScreen("game");
   }
 
@@ -268,7 +288,9 @@ export default function App() {
   }
 
   function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, isTurnLimit = false) {
-    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: isTurnLimit });
+    const elapsed = Math.floor((Date.now() - roundStartTime.current) / 1000);
+    const scoreHash = _hash(Math.round(newTS*100)/100, currentRound, currentDiff, elapsed);
+    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, elapsed, minElapsed: currentTurn * 2, scoreHash, turnLimitExceeded: isTurnLimit });
     setTotalScore(newTS);
     setPhase("gameover");
     fetchPreRank(newTS, currentDiff);
@@ -290,6 +312,8 @@ export default function App() {
       setLog(prev=>[`⚔️ 턴${turn}: ${exprDisplay} = ${dmg}!`, ...prev.slice(0,4)]);
 
       if (newHp <= 0) {
+        const elapsed = Math.floor((Date.now() - roundStartTime.current) / 1000);
+        const minElapsed = turn * 2;
         const perfect = newTotal === enemyMaxHp;
         const base = Math.round((newMax / turn) * 100) / 100;
         const fs = perfect ? Math.round(base*2*100)/100 : base;
@@ -297,7 +321,8 @@ export default function App() {
         const isGO = fs <= thresh;
         const newTS = totalScore + fs;
         const newRS = [...roundScores, { round, score: fs, perfect }];
-        setScore({ base, perfect, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
+        const scoreHash = _hash(Math.round(newTS*100)/100, round, difficulty, elapsed);
+        setScore({ base, perfect, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS, elapsed, minElapsed, scoreHash });
         setTotalScore(newTS);
         setRoundScores(newRS);
         if (isGO) {
@@ -331,6 +356,7 @@ export default function App() {
     setRound(nr); setEnemyMaxHp(mhp); setEnemyHp(mhp);
     setHand(genHand(nr)); setSelected([]); setTurn(1); setLog([]);
     setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setPhase("play");
+    roundStartTime.current = Date.now();
   }
 
   const hpPct = Math.max(0,(enemyHp/enemyMaxHp)*100);
