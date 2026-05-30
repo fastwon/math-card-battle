@@ -114,6 +114,7 @@ export default function App() {
   const [screen, setScreen] = useState("select");
   const [difficulty, setDifficulty] = useState(null);
   const [showRules, setShowRules] = useState(false);
+  const [showScoreDetail, setShowScoreDetail] = useState(false);
 
   // 랭킹
   const [top10, setTop10] = useState([]);
@@ -464,23 +465,33 @@ export default function App() {
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
         <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{round*5}</span>
         <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
-        <span style={{ background:"#92400e", borderRadius:20, padding:"3px 10px", fontSize:12 }}>💰 {totalScore.toFixed(2)}점</span>
       </div>
 
-      {/* Round score history */}
+      {/* 총점 (hover/click 시 라운드별 상세) */}
       {roundScores.length > 0 && (
-        <div style={{ width:"100%", maxWidth:340, background:"rgba(0,0,0,0.25)", borderRadius:10, padding:"8px 12px", marginBottom:10, fontSize:12, border:"1px solid rgba(255,255,255,0.07)" }}>
-          <div style={{ color:"#a78bfa", fontWeight:"bold", marginBottom:4 }}>📋 라운드 기록</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            {roundScores.map((r,i)=>(
-              <span key={i} style={{ background:"rgba(255,255,255,0.07)", borderRadius:8, padding:"2px 8px", color: r.perfect?"#4ade80":"#d1d5db" }}>
-                R{r.round}: {r.score.toFixed(2)}{r.perfect?"✨":""}
-              </span>
-            ))}
+        <div style={{ position:"relative", marginBottom:10 }}>
+          <div
+            onClick={() => setShowScoreDetail(v => !v)}
+            onMouseEnter={() => setShowScoreDetail(true)}
+            onMouseLeave={() => setShowScoreDetail(false)}
+            style={{ background:"rgba(0,0,0,0.3)", borderRadius:20, padding:"5px 16px", fontSize:13, color:"#fbbf24", fontWeight:"bold", cursor:"pointer", border:"1px solid rgba(251,191,36,0.3)", userSelect:"none" }}
+          >
+            💰 TOTAL {totalScore.toFixed(2)}점 ▾
           </div>
-          <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:6, paddingTop:6, color:"#fbbf24", fontWeight:"bold" }}>
-            TOTAL: {totalScore.toFixed(2)}점
-          </div>
+          {showScoreDetail && (
+            <div style={{ position:"absolute", top:"110%", left:"50%", transform:"translateX(-50%)", background:"rgba(15,12,41,0.97)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:"10px 14px", zIndex:50, minWidth:200, boxShadow:"0 8px 24px rgba(0,0,0,0.6)" }}>
+              {roundScores.map((r,i) => (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:16, fontSize:12, padding:"3px 0", color: r.perfect?"#4ade80":"#d1d5db", borderBottom: i<roundScores.length-1?"1px solid rgba(255,255,255,0.06)":"none" }}>
+                  <span>R{r.round}{r.perfect?" ✨":""}</span>
+                  <span style={{ fontWeight:"bold" }}>{r.score.toFixed(2)}점</span>
+                </div>
+              ))}
+              <div style={{ borderTop:"1px solid rgba(255,255,255,0.2)", marginTop:6, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:13, color:"#fbbf24", fontWeight:"bold" }}>
+                <span>TOTAL</span>
+                <span>{totalScore.toFixed(2)}점</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
