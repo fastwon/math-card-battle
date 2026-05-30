@@ -575,8 +575,18 @@ export default function App() {
           <div style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%" }}>
 
             {phase==="gameover"
-              ? <><div style={{ fontSize:44, marginBottom:4 }}>💀</div><div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div><div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>R{round} 점수 {score?.finalScore.toFixed(2)}점 — 기준 {score?.thresh}점 미달</div></>
-              : <><div style={{ fontSize:44, marginBottom:4 }}>🎉</div><div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div></>
+              ? <>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:6 }}>
+                    <div style={{ fontSize:36 }}>💀</div>
+                    <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:80, height:80, objectFit:"contain" }} />
+                  </div>
+                  <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
+                  <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>R{round} 점수 {score?.finalScore.toFixed(2)}점 — 기준 {score?.thresh}점 미달</div>
+                </>
+              : <>
+                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:120, height:120, objectFit:"contain", marginBottom:4 }} />
+                  <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div>
+                </>
             }
 
             {/* 점수 요약 */}
