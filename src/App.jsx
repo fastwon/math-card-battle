@@ -377,8 +377,8 @@ export default function App() {
 
         {/* 규칙 팝업 */}
         {showRules && (
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
-            <div style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"24px 24px", border:"2px solid rgba(192,132,252,0.4)", maxWidth:340, width:"100%", maxHeight:"85vh", overflowY:"auto" }}>
+          <div onClick={()=>setShowRules(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
+            <div onClick={e=>e.stopPropagation()} style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"24px 24px", border:"2px solid rgba(192,132,252,0.4)", maxWidth:340, width:"100%", maxHeight:"85vh", overflowY:"auto" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
                 <div style={{ fontSize:17, fontWeight:"bold", color:"#c084fc" }}>📖 게임 규칙</div>
                 <button onClick={()=>setShowRules(false)} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#9ca3af", padding:"4px 10px", cursor:"pointer", fontSize:13 }}>✕ 닫기</button>
