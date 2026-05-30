@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 
 const OPS = ["+", "-", "×", "÷"];
@@ -94,6 +94,9 @@ export default function App() {
   const [allRankings, setAllRankings] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
+  const [rankingsError, setRankingsError] = useState(null);
+  const [submitError, setSubmitError] = useState(null);
+  const searchDebounceRef = useRef(null);
 
   // Game state
   const [round, setRound] = useState(1);
@@ -122,62 +125,72 @@ export default function App() {
   useEffect(() => { fetchTop10(); }, []);
 
   async function fetchTop10() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("rankings")
       .select("*")
       .order("score", { ascending: false })
       .limit(10);
+    if (error) console.error("TOP10 로드 실패:", error.message);
     if (data) setTop10(data);
   }
 
   async function openRankings() {
     setScreen("rankings");
     setSearchQuery("");
-    const { data } = await supabase
+    setRankingsError(null);
+    const { data, error } = await supabase
       .from("rankings")
       .select("*")
       .order("score", { ascending: false })
       .limit(100);
+    if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
     if (data) setAllRankings(data);
   }
 
-  async function handleSearch(query) {
-    setSearchQuery(query);
+  async function fetchRankingList(query) {
     setSearchLoading(true);
-    if (query.trim() === "") {
-      const { data } = await supabase
-        .from("rankings")
-        .select("*")
-        .order("score", { ascending: false })
-        .limit(100);
-      if (data) setAllRankings(data);
-    } else {
-      const { data } = await supabase
-        .from("rankings")
-        .select("*")
-        .ilike("nickname", `%${query.trim()}%`)
-        .order("score", { ascending: false })
-        .limit(100);
-      if (data) setAllRankings(data);
-    }
+    setRankingsError(null);
+    const req = query.trim() === ""
+      ? supabase.from("rankings").select("*").order("score", { ascending: false }).limit(100)
+      : supabase.from("rankings").select("*").ilike("nickname", `%${query.trim()}%`).order("score", { ascending: false }).limit(100);
+    const { data, error } = await req;
+    if (error) setRankingsError("검색 중 오류가 발생했습니다. 다시 시도해주세요.");
+    if (data) setAllRankings(data);
     setSearchLoading(false);
+  }
+
+  function handleSearch(query) {
+    setSearchQuery(query);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => fetchRankingList(query), 300);
   }
 
   async function submitScore(currentTotalScore) {
     if (!nickname.trim() || submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
     const finalScore = Math.round(currentTotalScore * 100) / 100;
-    await supabase.from("rankings").insert([{
+    const { error: insertError } = await supabase.from("rankings").insert([{
       nickname: nickname.trim(),
       score: finalScore,
       difficulty,
       round,
     }]);
-    const { data } = await supabase
+    if (insertError) {
+      setSubmitError("등록에 실패했습니다. 다시 시도해주세요.");
+      setSubmitting(false);
+      return;
+    }
+    const { data, error: fetchError } = await supabase
       .from("rankings")
       .select("*")
       .order("score", { ascending: false })
       .limit(100);
+    if (fetchError) {
+      setSubmitError("순위를 불러오지 못했습니다.");
+      setSubmitting(false);
+      return;
+    }
     if (data) {
       const myRank = data.findIndex(r =>
         r.nickname === nickname.trim() && r.score === finalScore
@@ -285,17 +298,18 @@ export default function App() {
             style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:16, boxSizing:"border-box" }}
           />
 
-          {/* 결과 수 */}
-          <div style={{ fontSize:12, color:"#6b7280", marginBottom:10 }}>
-            {searchLoading ? "검색 중..." : `${allRankings.length}명 표시 중 (최대 100명)`}
-          </div>
+          {/* 결과 수 / 에러 */}
+          {rankingsError
+            ? <div style={{ color:"#f87171", fontSize:13, marginBottom:10, padding:"10px 14px", background:"rgba(239,68,68,0.1)", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)" }}>{rankingsError}</div>
+            : <div style={{ fontSize:12, color:"#6b7280", marginBottom:10 }}>{searchLoading ? "검색 중..." : `${allRankings.length}명 표시 중 (최대 100명)`}</div>
+          }
 
           {/* 랭킹 목록 */}
           <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
             {allRankings.map((entry, i) => (
               <RankRow key={entry.id} rank={i+1} entry={entry} highlight={false} />
             ))}
-            {allRankings.length === 0 && !searchLoading && (
+            {allRankings.length === 0 && !searchLoading && !rankingsError && (
               <div style={{ color:"#6b7280", textAlign:"center", padding:"40px 0" }}>검색 결과가 없습니다</div>
             )}
           </div>
@@ -507,6 +521,9 @@ export default function App() {
                 }}>
                   {submitting ? "등록 중..." : "🏅 랭킹 등록"}
                 </button>
+                {submitError && (
+                  <div style={{ marginTop:8, color:"#f87171", fontSize:12, padding:"8px", background:"rgba(239,68,68,0.1)", borderRadius:8, border:"1px solid rgba(239,68,68,0.3)" }}>{submitError}</div>
+                )}
               </div>
             )}
 
