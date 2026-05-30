@@ -564,7 +564,7 @@ export default function App() {
               ? <>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:6 }}>
                     <div style={{ fontSize:36 }}>💀</div>
-                    <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:100, height:100, objectFit:"contain" }} />
+                    <img src={`/player/player${Math.min(Math.max(0, round-1), 10)}.png`} alt="player" style={{ width:100, height:100, objectFit:"contain" }} />
                   </div>
                   <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
                   <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
