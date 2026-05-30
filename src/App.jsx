@@ -63,8 +63,21 @@ function parseExpression(selected) {
   } catch { return null; }
 }
 
-const ENEMY_EMOJIS = ["👹","🐉","👾","🧟","💀","🔥","👿","🦹"];
-const ENEMY_NAMES  = ["고블린","드래곤","외계인","좀비","해골왕","화염정령","악마","다크히어로"];
+const ENEMIES = [
+  { name: "슬라임",   img: "/enemies/enemy1.png"  },
+  { name: "고블린",   img: "/enemies/enemy2.png"  },
+  { name: "해적",     img: "/enemies/enemy3.png"  },
+  { name: "기사",     img: "/enemies/enemy4.png"  },
+  { name: "마법사",   img: "/enemies/enemy5.png"  },
+  { name: "드래곤",   img: "/enemies/enemy6.png"  },
+  { name: "악마",     img: "/enemies/enemy7.png"  },
+  { name: "해골왕",   img: "/enemies/enemy8.png"  },
+  { name: "외계인",   img: "/enemies/enemy9.png"  },
+  { name: "마왕",     img: "/enemies/enemy10.png" },
+];
+function getEnemy(round) {
+  return ENEMIES[(round - 1) % ENEMIES.length];
+}
 
 // ── 공통 스타일 ──
 const rankColor = i => i===0?"#fbbf24":i===1?"#d1d5db":i===2?"#cd7f32":"#9ca3af";
@@ -103,7 +116,6 @@ export default function App() {
   const [round, setRound] = useState(1);
   const [enemyMaxHp, setEnemyMaxHp] = useState(50);
   const [enemyHp, setEnemyHp] = useState(50);
-  const [enemyIdx, setEnemyIdx] = useState(0);
   const [hand, setHand] = useState([]);
   const [selected, setSelected] = useState([]);
   const [turn, setTurn] = useState(1);
@@ -209,7 +221,7 @@ export default function App() {
 
   function startGame(diff) {
     setDifficulty(diff);
-    setRound(1); setEnemyMaxHp(50); setEnemyHp(50); setEnemyIdx(0);
+    setRound(1); setEnemyMaxHp(50); setEnemyHp(50);
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
     setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
@@ -270,7 +282,6 @@ export default function App() {
     const nr = round+1;
     const mhp = Math.floor(50*Math.pow(1.5,nr-1));
     setRound(nr); setEnemyMaxHp(mhp); setEnemyHp(mhp);
-    setEnemyIdx(Math.floor(Math.random()*ENEMY_EMOJIS.length));
     setHand(genHand(nr)); setSelected([]); setTurn(1); setLog([]);
     setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setPhase("play");
   }
@@ -489,8 +500,8 @@ export default function App() {
 
       {/* Enemy */}
       <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <div style={{ fontSize:46, transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }}>{ENEMY_EMOJIS[enemyIdx]}</div>
-        <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{ENEMY_NAMES[enemyIdx]} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
+        <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:100, height:100, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
+        <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
         <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
           <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
         </div>
