@@ -485,14 +485,14 @@ export default function App() {
       )}
 
       {/* Enemy */}
-      <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ position:"relative", background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ position:"absolute", top:10, right:12, background:"rgba(0,0,0,0.4)", borderRadius:8, padding:"3px 8px", fontSize:12, color:"#facc15", fontWeight:"bold" }}>⚡ {turn}/{round*5}턴</div>
         <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
         <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
         <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
           <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
         </div>
         <div style={{ fontSize:12, color:"#d1d5db" }}>HP: {enemyHp} / {enemyMaxHp}</div>
-        {lastDmg && phase==="play" && <div style={{ color:"#f87171", fontSize:12, marginTop:2 }}>-{lastDmg} 💥</div>}
       </div>
 
       {/* Expression */}
