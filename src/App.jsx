@@ -19,7 +19,10 @@ function makeCard(type, value) {
 function genCard(hand = []) {
   const opCount = hand.filter(c => c.type === "op").length;
   const isOp = opCount >= 4 ? false : Math.random() < 0.3;
-  if (isOp) return makeCard("op", OPS[Math.floor(Math.random() * OPS.length)]);
+  if (isOp) {
+    const availableOps = OPS.filter(op => hand.filter(c => c.type === "op" && c.value === op).length < 3);
+    if (availableOps.length > 0) return makeCard("op", availableOps[Math.floor(Math.random() * availableOps.length)]);
+  }
   return makeCard("num", randInt(1, 9));
 }
 function maxHandSize(round) {
@@ -35,6 +38,10 @@ function genHand(round) {
     hand = [];
     for (let i = 0; i < size; i++) hand.push(genCard(hand));
     if (hand.filter(c=>c.type==="num").length >= 2 && hand.filter(c=>c.type==="op").length >= 1) break;
+  }
+  if (!hand.some(c => c.type === "op" && c.value === "×")) {
+    const opIdx = hand.findIndex(c => c.type === "op");
+    hand[opIdx !== -1 ? opIdx : 0] = makeCard("op", "×");
   }
   return hand;
 }
@@ -454,7 +461,7 @@ export default function App() {
     <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
 
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(top10Tab); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인</button>
+        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(top10Tab); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
         <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
         <div style={{ width:60 }} />
       </div>
@@ -603,7 +610,7 @@ export default function App() {
             )}
 
             {/* 게임오버: 현재 순위 + 닉네임 등록 */}
-            {phase==="gameover" && !registrationDecided && (
+            {phase==="gameover" && !registrationDecided && (score?.newTS ?? 0) > 0 && (
               <div style={{ marginBottom:12 }}>
                 {/* 현재 순위 */}
                 <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, padding:"12px", marginBottom:12 }}>
@@ -676,10 +683,10 @@ export default function App() {
               </>
             )}
 
-            {phase==="gameover" && registrationDecided && (
+            {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (
               <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
                 <button onClick={()=>startGame(difficulty)} style={{ padding:"10px 18px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🔄 재도전</button>
-                <button onClick={()=>{ fetchTop10(top10Tab); setScreen("select"); }} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메뉴</button>
+                <button onClick={()=>{ fetchTop10(top10Tab); setScreen("select"); }} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메인으로</button>
               </div>
             )}
           </div>
