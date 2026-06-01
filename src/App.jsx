@@ -295,13 +295,15 @@ export default function App() {
 
       if (newHp <= 0) {
         const perfect = newTotal === enemyMaxHp;
+        const allIn = selected.length === hand.length;
+        const multiplier = (perfect ? 2 : 1) * (allIn ? 2 : 1);
         const base = Math.round((newMax / turn) * 100) / 100;
-        const fs = perfect ? Math.round(base*2*100)/100 : base;
+        const fs = Math.round(base * multiplier * 100) / 100;
         const thresh = DIFFICULTIES[difficulty].threshold(round);
         const isGO = fs <= thresh;
         const newTS = totalScore + fs;
-        const newRS = [...roundScores, { round, score: fs, perfect }];
-        setScore({ base, perfect, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
+        const newRS = [...roundScores, { round, score: fs, perfect, allIn }];
+        setScore({ base, perfect, allIn, multiplier, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
         setTotalScore(newTS);
         setRoundScores(newRS);
         if (isGO) {
@@ -437,7 +439,7 @@ export default function App() {
               {[
                 { emoji:"⚔️", title:"기본 진행", items:["손패에서 카드를 선택해 수식을 만들고 공격","적의 HP를 0으로 만들면 라운드 클리어","공격 후 사용한 카드는 사라지고 매 턴 카드 1장 추가","카드를 쓰기 싫으면 '턴 종료'로 넘길 수 있음","손패 최대 크기: R1~2=7장 / R3~4=8장 / R5~6=9장 / R7~=10장"] },
                 { emoji:"🃏", title:"카드 & 수식 규칙", items:["숫자와 연산자를 번갈아 선택 (숫자→연산→숫자→...)","첫 카드와 마지막 카드는 반드시 숫자","결과가 0 이하면 공격 불가","같은 숫자 3장을 연속 선택하면 제곱으로 변환 (예: 3 3 3 → 3² = 9)"] },
-                { emoji:"🏆", title:"점수 계산", items:["라운드 점수 = 최고 데미지 ÷ 클리어 턴","적 HP를 딱 맞게 0으로 → 퍼펙트 클리어! 점수 ×2","총점 = 각 라운드 점수의 합"] },
+                { emoji:"🏆", title:"점수 계산", items:["라운드 점수 = 최고 데미지 ÷ 클리어 턴","적 HP를 딱 맞게 0으로 → 퍼펙트 클리어! ✨ 점수 ×2","손패의 모든 카드를 사용해서 처치 → 올 인! 🃏 점수 ×2","퍼펙트 클리어 + 올 인 동시 달성 → ⚡ 콤보! 점수 ×4","총점 = 각 라운드 점수의 합"] },
                 { emoji:"💀", title:"게임오버 조건", items:["라운드 점수가 기준 이하면 게임오버","이지: 기준 = 라운드 수 / 노말: 기준 = 라운드×2 / 하드: 기준 = 라운드²","라운드당 최대 턴 수(5 + 라운드×5) 초과 시에도 게임오버"] },
               ].map(section => (
                 <div key={section.title} style={{ marginBottom:16 }}>
@@ -486,8 +488,8 @@ export default function App() {
           {showScoreDetail && (
             <div style={{ position:"absolute", top:"110%", left:"50%", transform:"translateX(-50%)", background:"rgba(15,12,41,0.97)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:"10px 14px", zIndex:50, minWidth:200, boxShadow:"0 8px 24px rgba(0,0,0,0.6)" }}>
               {roundScores.map((r,i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:16, fontSize:12, padding:"3px 0", color: r.perfect?"#4ade80":"#d1d5db", borderBottom: i<roundScores.length-1?"1px solid rgba(255,255,255,0.06)":"none" }}>
-                  <span>R{r.round}{r.perfect?" ✨":""}</span>
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:16, fontSize:12, padding:"3px 0", color: r.perfect&&r.allIn?"#fbbf24":r.perfect?"#4ade80":r.allIn?"#fb923c":"#d1d5db", borderBottom: i<roundScores.length-1?"1px solid rgba(255,255,255,0.06)":"none" }}>
+                  <span>R{r.round}{r.perfect?" ✨":""}{r.allIn?" 🃏":""}</span>
                   <span style={{ fontWeight:"bold" }}>{r.score.toFixed(2)}점</span>
                 </div>
               ))}
@@ -600,7 +602,9 @@ export default function App() {
                 <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#9ca3af" }}>📊 점수 계산</div>
                 <div>{score?.maxD} ÷ {score?.turnCount} = <strong style={{ color:"#fff" }}>{score?.base}</strong></div>
                 {score?.perfect && <div style={{ color:"#4ade80" }}>✨ 퍼펙트 클리어! × 2</div>}
-                <div>🏆 라운드 점수: <strong style={{ color:score?.perfect?"#4ade80":"#c084fc", fontSize:16 }}>{score?.finalScore?.toFixed(2)}</strong></div>
+                {score?.allIn && <div style={{ color:"#fb923c" }}>🃏 올 인! × 2</div>}
+                {(score?.multiplier ?? 1) >= 4 && <div style={{ color:"#fbbf24", fontWeight:"bold" }}>⚡ 콤보! × 4</div>}
+                <div>🏆 라운드 점수: <strong style={{ color: (score?.multiplier??1)>=4?"#fbbf24":score?.allIn?"#fb923c":score?.perfect?"#4ade80":"#c084fc", fontSize:16 }}>{score?.finalScore?.toFixed(2)}</strong></div>
                 <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}>
                   💰 최종 총점: <strong style={{ color:"#fbbf24", fontSize:16 }}>{score?.newTS?.toFixed(2)}점</strong>
                 </div>
