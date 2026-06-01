@@ -316,7 +316,7 @@ export default function App() {
     setSelected([]);
 
     const nextTurn = turn + 1;
-    if (nextTurn > round * 5) {
+    if (nextTurn > 5 + round * 5) {
       const thresh = DIFFICULTIES[difficulty].threshold(round);
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
       return;
@@ -463,7 +463,7 @@ export default function App() {
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
         <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
-        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{round*5}</span>
+        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{5 + round*5}</span>
         <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
       </div>
 
@@ -497,7 +497,7 @@ export default function App() {
 
       {/* Enemy */}
       <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
+        <img key={round} src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
         <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
         <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
           <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
@@ -573,17 +573,16 @@ export default function App() {
             {/* 헤더 */}
             {phase==="gameover"
               ? <>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:6 }}>
-                    <div style={{ fontSize:36 }}>💀</div>
-                    <img src={`/player/player${Math.min(Math.max(0, round-1), 10)}.png`} alt="player" style={{ width:100, height:100, objectFit:"contain" }} />
+                  <div style={{ display:"flex", justifyContent:"center", marginBottom:6 }}>
+                    <img src={`/player/player${Math.min(Math.max(0, round-1), 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain" }} />
                   </div>
                   <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
                   <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
-                    {score?.turnLimitExceeded ? `R${round} 턴 초과 (${round*5}턴)` : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
+                    {score?.turnLimitExceeded ? `R${round} 턴 초과 (${5 + round*5}턴)` : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
                   </div>
                 </>
               : <>
-                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ width:150, height:150, objectFit:"contain", marginBottom:4 }} />
+                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain", marginBottom:4 }} />
                   <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div>
                 </>
             }
