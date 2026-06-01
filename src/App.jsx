@@ -90,8 +90,8 @@ function RankRow({ rank, entry }) {
     <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:8 }}>
       <span style={{ color: rankColor(rank-1), fontWeight:"bold", width:32, fontSize:13 }}>{rank}등</span>
       <span style={{ flex:1, color:"#fff", fontWeight:"bold", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{entry.nickname}</span>
-      <span style={{ color:"#fbbf24", fontWeight:"bold", fontSize:13 }}>{entry.score}점</span>
-      <span style={{ color: DIFFICULTIES[entry.difficulty]?.color, fontSize:11, width:32, textAlign:"right" }}>{DIFFICULTIES[entry.difficulty]?.label}</span>
+      <span style={{ color:"#a78bfa", fontSize:12, whiteSpace:"nowrap" }}>R{entry.round}</span>
+      <span style={{ color:"#fbbf24", fontWeight:"bold", fontSize:13, whiteSpace:"nowrap" }}>{entry.score}점</span>
     </div>
   );
 }
@@ -163,7 +163,7 @@ export default function App() {
   async function fetchTop10(tab) {
     const { data, error } = await supabase
       .from("rankings").select("*").eq("difficulty", tab)
-      .order("score", { ascending: false }).limit(10);
+      .order("round", { ascending: false }).order("score", { ascending: false }).limit(10);
     if (error) console.error("TOP10 로드 실패:", error.message);
     if (data) setTop10(data);
   }
@@ -173,12 +173,13 @@ export default function App() {
     fetchTop10(tab);
   }
 
-  async function fetchPreRank(scoreVal, diff) {
+  async function fetchPreRank(scoreVal, diff, currentRound) {
     setPreRankLoading(true);
     const finalScore = Math.round(scoreVal * 100) / 100;
     const { count } = await supabase
       .from("rankings").select("*", { count: "exact", head: true })
-      .eq("difficulty", diff).gt("score", finalScore);
+      .eq("difficulty", diff)
+      .or(`round.gt.${currentRound},and(round.eq.${currentRound},score.gt.${finalScore})`);
     setPreRank((count ?? 0) + 1);
     setPreRankLoading(false);
   }
@@ -201,7 +202,7 @@ export default function App() {
     setSearchLoading(true);
     setRankingsError(null);
     let req = supabase.from("rankings").select("*")
-      .eq("difficulty", tab).order("score", { ascending: false }).limit(100);
+      .eq("difficulty", tab).order("round", { ascending: false }).order("score", { ascending: false }).limit(100);
     if (query.trim() !== "") req = req.ilike("nickname", `%${query.trim()}%`);
     const { data, error } = await req;
     if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
@@ -230,14 +231,14 @@ export default function App() {
     }
     const { data, error: fetchError } = await supabase
       .from("rankings").select("*").eq("difficulty", difficulty)
-      .order("score", { ascending: false }).limit(100);
+      .order("round", { ascending: false }).order("score", { ascending: false }).limit(100);
     if (fetchError) {
       setSubmitError("순위를 불러오지 못했습니다.");
       setSubmitting(false);
       return;
     }
     if (data) {
-      const myRank = data.findIndex(r => r.nickname === nickname.trim() && r.score === finalScore) + 1;
+      const myRank = data.findIndex(r => r.nickname === nickname.trim() && r.score === finalScore && r.round === round) + 1;
       setFinalRank(myRank || null);
     }
     fetchTop10(top10Tab);
@@ -274,7 +275,7 @@ export default function App() {
     setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: isTurnLimit });
     setTotalScore(newTS);
     setPhase("gameover");
-    fetchPreRank(newTS, currentDiff);
+    fetchPreRank(newTS, currentDiff, currentRound);
   }
 
   function endTurn(skip = false) {
@@ -305,7 +306,7 @@ export default function App() {
         setRoundScores(newRS);
         if (isGO) {
           setPhase("gameover");
-          fetchPreRank(newTS, difficulty);
+          fetchPreRank(newTS, difficulty, round);
         } else {
           setPhase("result");
         }
@@ -324,7 +325,7 @@ export default function App() {
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
       return;
     }
-    if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4) {
+    if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4 && !newHand.some(c => c.type === "op" && c.value === "×")) {
       setHand(newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand);
     } else {
       setHand(addCard(newHand, round));
