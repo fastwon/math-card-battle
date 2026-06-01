@@ -39,10 +39,6 @@ function genHand(round) {
     for (let i = 0; i < size; i++) hand.push(genCard(hand));
     if (hand.filter(c=>c.type==="num").length >= 2 && hand.filter(c=>c.type==="op").length >= 1) break;
   }
-  if (!hand.some(c => c.type === "op" && c.value === "×")) {
-    const opIdx = hand.findIndex(c => c.type === "op");
-    hand[opIdx !== -1 ? opIdx : 0] = makeCard("op", "×");
-  }
   return hand;
 }
 function parseExpression(selected) {
@@ -328,7 +324,11 @@ export default function App() {
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
       return;
     }
-    setHand(addCard(newHand, round));
+    if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4) {
+      setHand(newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand);
+    } else {
+      setHand(addCard(newHand, round));
+    }
     setTurn(nextTurn);
   }
 
