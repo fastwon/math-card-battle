@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
+import { play, isMuted, setMuted } from "./sfx";
 
 const OPS = ["+", "-", "×", "÷"];
 
@@ -93,6 +94,20 @@ function RankRow({ rank, entry }) {
       <span style={{ color:"#a78bfa", fontSize:12, whiteSpace:"nowrap" }}>R{entry.round}</span>
       <span style={{ color:"#fbbf24", fontWeight:"bold", fontSize:13, whiteSpace:"nowrap" }}>{entry.score}점</span>
     </div>
+  );
+}
+
+function MuteButton({ style }) {
+  const [muted, setM] = useState(isMuted());
+  function toggle() {
+    setMuted(!muted);
+    setM(!muted);
+    if (muted) play("click");
+  }
+  return (
+    <button onClick={toggle} title={muted ? "소리 켜기" : "소리 끄기"} style={{ width:32, height:28, borderRadius:10, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.07)", cursor:"pointer", fontSize:14, lineHeight:1, ...style }}>
+      {muted ? "🔇" : "🔊"}
+    </button>
   );
 }
 
@@ -275,6 +290,7 @@ export default function App() {
   function playHitFx(dmg) {
     const ratio = dmg / enemyMaxHp;
     const id = Date.now() + Math.random();
+    play("hit", ratio);
     setHitId(n => n + 1);
     setDmgPops(prev => [...prev, { id, dmg, ratio }]);
     fxTimeout(() => setDmgPops(prev => prev.filter(p => p.id !== id)), 1000);
@@ -287,6 +303,7 @@ export default function App() {
 
   function startGame(diff) {
     clearFx();
+    play("click");
     setDifficulty(diff);
     setRound(1); setEnemyMaxHp(50); setEnemyHp(50);
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
@@ -299,7 +316,9 @@ export default function App() {
 
   function toggleCard(card) {
     if (phase !== "play") return;
-    setSelected(prev => prev.find(c=>c.id===card.id) ? prev.filter(c=>c.id!==card.id) : [...prev, card]);
+    const isSel = selected.some(c=>c.id===card.id);
+    play(isSel ? "deselect" : "select");
+    setSelected(prev => isSel ? prev.filter(c=>c.id!==card.id) : [...prev, card]);
   }
 
   function addCard(h, r) {
@@ -351,7 +370,12 @@ export default function App() {
           : { text: "💥 K.O.!", color: "#f87171" }
         );
         if (isGO) fetchPreRank(newTS, difficulty, round);
+        play("kill");
+        if (perfect && allIn) play("combo");
+        else if (perfect) play("perfect");
+        else if (allIn) play("allIn");
         fxTimeout(() => {
+          play(isGO ? "gameOver" : "roundClear");
           setKillBanner(null);
           setPhase(isGO ? "gameover" : "result");
         }, 1200);
@@ -360,6 +384,7 @@ export default function App() {
       const usedIds = new Set(selected.map(c=>c.id));
       newHand = hand.filter(c=>!usedIds.has(c.id));
     } else {
+      play("skip");
       setLog(prev=>[`💤 턴${turn}: 턴 넘김`, ...prev.slice(0,4)]);
     }
     setSelected([]);
@@ -367,6 +392,7 @@ export default function App() {
     const nextTurn = turn + 1;
     if (nextTurn > 5 + round * 5) {
       const thresh = DIFFICULTIES[difficulty].threshold(round);
+      play("gameOver");
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
       return;
     }
@@ -375,11 +401,13 @@ export default function App() {
     } else {
       setHand(addCard(newHand, round));
     }
+    if (newHand.length < maxHandSize(round)) fxTimeout(() => play("draw"), skip ? 0 : 250);
     setTurn(nextTurn);
   }
 
   function nextRound() {
     clearFx();
+    play("click");
     const nr = round+1;
     const mhp = Math.floor(50*Math.pow(1.5,nr-1));
     setRound(nr); setEnemyMaxHp(mhp); setEnemyHp(mhp);
@@ -433,6 +461,7 @@ export default function App() {
   if (screen === "select") {
     return (
       <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
+        <MuteButton style={{ position:"fixed", top:16, right:16 }} />
         <div style={{ position:"relative", marginBottom:6 }}>
           <div style={{ fontSize:26, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
           <button onClick={()=>setShowRules(true)} style={{ position:"absolute", right:-36, top:"50%", transform:"translateY(-50%)", width:26, height:26, borderRadius:"50%", border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:14, fontWeight:"bold", cursor:"pointer", lineHeight:1 }}>?</button>
@@ -517,7 +546,7 @@ export default function App() {
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
         <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
         <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
-        <div style={{ width:60 }} />
+        <div style={{ width:60, display:"flex", justifyContent:"flex-end" }}><MuteButton /></div>
       </div>
 
       {/* Status bar */}
