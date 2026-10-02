@@ -111,6 +111,114 @@ function MuteButton({ style }) {
   );
 }
 
+// 메인 배경에 떠오르는 카드 (x: 가로 %, dur: 초, delay: 음수로 시작 위치 분산)
+const BG_CARDS = [
+  { v:"7", x:6,  dur:16, delay:-2,  size:1.0 },
+  { v:"×", x:22, dur:20, delay:-11, size:0.8 },
+  { v:"3", x:38, dur:18, delay:-6,  size:0.7 },
+  { v:"+", x:55, dur:22, delay:-15, size:0.9 },
+  { v:"9", x:72, dur:17, delay:-3,  size:1.1 },
+  { v:"÷", x:88, dur:19, delay:-9,  size:0.8 },
+  { v:"5", x:14, dur:21, delay:-17, size:0.8 },
+  { v:"−", x:46, dur:15, delay:-12, size:1.0 },
+  { v:"8", x:64, dur:23, delay:-19, size:0.7 },
+  { v:"²", x:80, dur:18, delay:-14, size:0.9 },
+];
+
+function FloatingCards() {
+  return (
+    <div aria-hidden style={{ position:"fixed", inset:0, overflow:"hidden", pointerEvents:"none", zIndex:0 }}>
+      {BG_CARDS.map((c, i) => {
+        const isOp = !/\d/.test(c.v);
+        return (
+          <div key={i} className="bg-card" style={{
+            position:"absolute", top:"105%", left:`${c.x}%`,
+            width:44*c.size, height:62*c.size, borderRadius:8,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:24*c.size, fontWeight:"bold", color:"#fff", opacity:0.13,
+            background: isOp ? "linear-gradient(135deg,#4c1d95,#a855f7)" : "linear-gradient(135deg,#1e3a8a,#3b82f6)",
+            border:"2px solid rgba(255,255,255,0.5)",
+            animationDuration:`${c.dur}s`, animationDelay:`${c.delay}s`,
+          }}>{c.v}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+// 메인 화면 자동 시연: 카드가 놓이고 → 수식 결과 → 적 피격, 반복
+const DEMOS = [
+  { cards:["7","×","8"], result:"56" },
+  { cards:["9","9","9"], result:"81", note:"같은 숫자 3장 = 제곱!" },
+  { cards:["6","+","4","×","9"], result:"42" },
+];
+
+const DEMO_ENEMY_COUNT = 7; // 후반 보스(R8~)는 메인에서 숨김
+
+function HeroDemo() {
+  const [tick, setTick] = useState(0);
+  const [cycle, setCycle] = useState(0);
+  const demo = DEMOS[cycle % DEMOS.length];
+  const enemyIdx = cycle % DEMO_ENEMY_COUNT;
+  const enemy = ENEMIES[enemyIdx];
+  const n = demo.cards.length;
+  const showResult = tick > n;
+  const hit = tick >= n + 2;
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 420);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    if (tick > n + 5) { setTick(0); setCycle(c => c + 1); }
+  }, [tick, n]);
+
+  return (
+    <div style={{ position:"relative", width:"100%", maxWidth:340, background:"rgba(0,0,0,0.28)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:16, padding:"10px 12px 12px", marginBottom:16 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        {/* 적 */}
+        <div style={{ position:"relative", width:92, flexShrink:0, textAlign:"center" }}>
+          <div key={`${cycle}-${hit}`} className={hit ? "enemy-hit" : "bob"} style={{ display:"inline-block" }}>
+            <img src={enemy.img} alt={enemy.name} style={{ width:84, height:84, objectFit:"contain", display:"block" }} />
+          </div>
+          {hit && (
+            <div key={`pop-${cycle}`} className="dmg-pop" style={{ position:"absolute", top:16, left:"50%", fontSize:24, fontWeight:900, color:"#fbbf24", textShadow:"0 0 10px rgba(239,68,68,0.9), 0 2px 0 #000", whiteSpace:"nowrap", pointerEvents:"none" }}>
+              -{demo.result}
+            </div>
+          )}
+          <div style={{ fontSize:10, color:"#a78bfa" }}>R{enemyIdx + 1} {enemy.name}</div>
+        </div>
+
+        {/* 카드 + 결과 */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", gap:4, justifyContent:"center", minHeight:50, alignItems:"center" }}>
+            {demo.cards.slice(0, Math.min(tick, n)).map((v, i) => {
+              const isOp = !/\d/.test(v);
+              return (
+                <div key={`${cycle}-${i}`} className="card-in" style={{
+                  width:32, height:46, borderRadius:7, flexShrink:0,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:isOp?16:19, fontWeight:"bold", color:"#fff",
+                  background: isOp ? "linear-gradient(135deg,#7c3aed,#a855f7)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
+                  border:"2px solid rgba(255,255,255,0.7)", boxShadow:"0 2px 6px rgba(0,0,0,0.4)",
+                }}>{v}</div>
+              );
+            })}
+          </div>
+          <div style={{ height:38, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+            {showResult && (
+              <>
+                <div key={`r-${cycle}`} className="result-pop" style={{ fontSize:20, fontWeight:900, color:"#4ade80" }}>= {demo.result} ⚔️</div>
+                {demo.note && <div style={{ fontSize:10, color:"#fbbf24" }}>{demo.note}</div>}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiffTabs({ active, onChange }) {
   return (
     <div style={{ display:"flex", gap:4, marginBottom:12 }}>
@@ -460,32 +568,59 @@ export default function App() {
   // ── 메인 화면 ──
   if (screen === "select") {
     return (
-      <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
-        <MuteButton style={{ position:"fixed", top:16, right:16 }} />
-        <div style={{ position:"relative", marginBottom:6 }}>
-          <div style={{ fontSize:26, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
-          <button onClick={()=>setShowRules(true)} style={{ position:"absolute", right:-36, top:"50%", transform:"translateY(-50%)", width:26, height:26, borderRadius:"50%", border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:14, fontWeight:"bold", cursor:"pointer", lineHeight:1 }}>?</button>
-        </div>
-        <div style={{ color:"#9ca3af", fontSize:14, marginBottom:32 }}>난이도를 선택하세요</div>
+      <div style={{ position:"relative", minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
+        <FloatingCards />
+        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"16px 16px 28px" }}>
 
-        {Object.entries(DIFFICULTIES).map(([key, d]) => (
-          <button key={key} onClick={()=>startGame(key)} style={{
-            width:260, marginBottom:14, padding:"18px 0", borderRadius:16, border:`2px solid ${d.color}`,
-            background:"rgba(0,0,0,0.3)", color:"#fff", fontSize:17, fontWeight:"bold", cursor:"pointer", transition:"all 0.2s",
-          }}
-          onMouseOver={e=>e.currentTarget.style.background=`${d.color}33`}
-          onMouseOut={e=>e.currentTarget.style.background="rgba(0,0,0,0.3)"}
-          >
-            <div style={{ fontSize:28, marginBottom:4 }}>{d.emoji}</div>
-            <div style={{ color: d.color }}>{d.label}</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:4 }}>
-              {key==="easy" ? "라운드 수 이하 → 게임오버" : key==="normal" ? "라운드×2 이하 → 게임오버" : "라운드² 이하 → 게임오버"}
-            </div>
-          </button>
-        ))}
+        {/* 상단 바: 규칙 / 음소거 */}
+        <div style={{ width:"100%", maxWidth:340, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <button onClick={()=>setShowRules(true)} style={{ height:28, padding:"0 12px", borderRadius:10, border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:12, fontWeight:"bold", cursor:"pointer" }}>📖 게임 규칙</button>
+          <MuteButton />
+        </div>
+
+        {/* 타이틀 */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+          <span className="bob" style={{ fontSize:"clamp(20px, 6vw, 26px)" }}>✨</span>
+          <h1 className="title-shine" style={{
+            fontSize:"clamp(28px, 9vw, 38px)", fontWeight:900, letterSpacing:2, whiteSpace:"nowrap",
+            background:"linear-gradient(90deg,#c084fc,#f0abfc,#fbbf24,#f0abfc,#c084fc)", backgroundSize:"200% auto",
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
+            filter:"drop-shadow(0 2px 8px rgba(192,132,252,0.5))",
+          }}>수학 카드 배틀</h1>
+          <span className="bob" style={{ fontSize:"clamp(20px, 6vw, 26px)", animationDelay:"-1.2s" }}>✨</span>
+        </div>
+        <div style={{ color:"#d1d5db", fontSize:13, marginBottom:14, textAlign:"center" }}>
+          카드로 <strong style={{ color:"#4ade80" }}>수식</strong>을 만들어 몬스터를 쓰러뜨려라!
+        </div>
+
+        <HeroDemo />
+
+        {/* 난이도 선택 */}
+        <div style={{ color:"#9ca3af", fontSize:12, marginBottom:8 }}>▼ 난이도를 골라 바로 시작 ▼</div>
+        <div style={{ display:"flex", gap:8, width:"100%", maxWidth:340 }}>
+          {Object.entries(DIFFICULTIES).map(([key, d]) => (
+            <button key={key} onClick={()=>startGame(key)} style={{
+              flex:1, minWidth:0, padding:"12px 4px", borderRadius:14, border:`2px solid ${d.color}`,
+              background:`linear-gradient(180deg, ${d.color}33, rgba(0,0,0,0.35))`, color:"#fff", cursor:"pointer",
+              boxShadow:`0 4px 14px ${d.color}44`, transition:"transform 0.15s, background 0.2s",
+            }}
+            onMouseOver={e=>e.currentTarget.style.background=`${d.color}55`}
+            onMouseOut={e=>e.currentTarget.style.background=`linear-gradient(180deg, ${d.color}33, rgba(0,0,0,0.35))`}
+            onPointerDown={e=>e.currentTarget.style.transform="scale(0.95)"}
+            onPointerUp={e=>e.currentTarget.style.transform="none"}
+            onPointerLeave={e=>e.currentTarget.style.transform="none"}
+            >
+              <div style={{ fontSize:26, marginBottom:2 }}>{d.emoji}</div>
+              <div style={{ color:"#fff", fontSize:16, fontWeight:"bold" }}>{d.label}</div>
+              <div style={{ fontSize:10, color:"#d1d5db", marginTop:3, whiteSpace:"nowrap" }}>
+                {key==="easy" ? "기준 R점" : key==="normal" ? "기준 R×2점" : "기준 R²점"}
+              </div>
+            </button>
+          ))}
+        </div>
 
         {/* TOP 10 */}
-        <div style={{ marginTop:24, width:280, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ marginTop:20, width:"100%", maxWidth:340, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
           <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 TOP 10</div>
           <DiffTabs active={top10Tab} onChange={handleTop10Tab} />
           <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
@@ -499,6 +634,8 @@ export default function App() {
             border:"1px solid rgba(192,132,252,0.4)", background:"rgba(192,132,252,0.1)",
             color:"#c084fc", fontSize:13, fontWeight:"bold", cursor:"pointer",
           }}>전체 랭킹 보기 →</button>
+        </div>
+
         </div>
 
         {/* 규칙 팝업 */}
