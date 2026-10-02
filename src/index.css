@@ -8,3 +8,74 @@ body {
   font-family: 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ── 타격감 연출 ── */
+@keyframes dmgFloat {
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.4); }
+  15%  { opacity: 1; transform: translate(-50%, -14px) scale(1.3); }
+  30%  { transform: translate(-50%, -20px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -70px) scale(1); }
+}
+@keyframes enemyHit {
+  0%   { transform: translateX(0); filter: none; }
+  12%  { transform: translateX(-12px) scale(0.95); filter: brightness(3) saturate(0); }
+  30%  { transform: translateX(10px); filter: brightness(1.4) sepia(1) hue-rotate(-50deg) saturate(6); }
+  50%  { transform: translateX(-6px); }
+  70%  { transform: translateX(4px); }
+  100% { transform: none; filter: none; }
+}
+@keyframes enemyDie {
+  0%   { transform: scale(1); opacity: 1; filter: brightness(3); }
+  100% { transform: scale(0.2) rotate(20deg) translateY(40px); opacity: 0; filter: brightness(3); }
+}
+@keyframes screenShake {
+  0%, 100% { transform: none; }
+  15% { transform: translate(-6px, 3px); }
+  30% { transform: translate(6px, -4px); }
+  45% { transform: translate(-4px, -2px); }
+  60% { transform: translate(4px, 3px); }
+  80% { transform: translate(-2px, 1px); }
+}
+@keyframes flash {
+  from { opacity: 0.55; }
+  to   { opacity: 0; }
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.5) rotate(-10deg); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes bannerPop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(0.9); }
+  28%  { transform: translate(-50%, -50%) scale(1.06); }
+  38%  { transform: translate(-50%, -50%) scale(1); }
+  85%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
+}
+@keyframes overlayPop {
+  from { opacity: 0; transform: scale(0.75) translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5); }
+  50%      { box-shadow: 0 4px 30px rgba(239, 68, 68, 1); }
+}
+
+.dmg-pop      { animation: dmgFloat 1s ease-out forwards; }
+.enemy-hit    { animation: enemyHit 0.4s ease-out; }
+.enemy-dying  { animation: enemyHit 0.4s ease-out, enemyDie 0.6s ease-in 0.35s forwards; }
+.screen-shake { animation: screenShake 0.4s ease-out; }
+.hit-flash    { animation: flash 0.35s ease-out forwards; }
+.card-in      { animation: cardIn 0.35s cubic-bezier(.2,1.4,.4,1) backwards; }
+.kill-banner  { animation: bannerPop 1.2s ease-out forwards; }
+.overlay-pop  { animation: overlayPop 0.35s cubic-bezier(.2,1.3,.4,1); }
+.ready-pulse  { animation: readyPulse 1.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dmg-pop, .enemy-hit, .enemy-dying, .screen-shake, .hit-flash,
+  .card-in, .kill-banner, .overlay-pop, .ready-pulse {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}

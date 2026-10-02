@@ -142,7 +142,13 @@ export default function App() {
   const [log, setLog] = useState([]);
   const [phase, setPhase] = useState("play");
   const [lastDmg, setLastDmg] = useState(null);
-  const [shake, setShake] = useState(false);
+  // 타격 연출
+  const [hitId, setHitId] = useState(0);
+  const [dmgPops, setDmgPops] = useState([]);
+  const [screenShake, setScreenShake] = useState(false);
+  const [flashId, setFlashId] = useState(0);
+  const [killBanner, setKillBanner] = useState(null);
+  const fxTimers = useRef([]);
   const [maxDmg, setMaxDmg] = useState(0);
   const [totalDmgDealt, setTotalDmgDealt] = useState(0);
   const [score, setScore] = useState(null);
@@ -250,7 +256,37 @@ export default function App() {
   const exprValue = parsed?.value ?? null;
   const exprDisplay = parsed ? parsed.tokens.map(t=>t.display).join(" ") : selected.map(c=>c.value).join(" ");
 
+  function fxTimeout(fn, ms) {
+    fxTimers.current.push(setTimeout(fn, ms));
+  }
+  function clearFx() {
+    fxTimers.current.forEach(clearTimeout);
+    fxTimers.current = [];
+    setDmgPops([]); setKillBanner(null); setScreenShake(false); setHitId(0);
+  }
+  useEffect(() => clearFx, []);
+
+  function goMain() {
+    clearFx();
+    fetchTop10(top10Tab);
+    setScreen("select");
+  }
+
+  function playHitFx(dmg) {
+    const ratio = dmg / enemyMaxHp;
+    const id = Date.now() + Math.random();
+    setHitId(n => n + 1);
+    setDmgPops(prev => [...prev, { id, dmg, ratio }]);
+    fxTimeout(() => setDmgPops(prev => prev.filter(p => p.id !== id)), 1000);
+    if (ratio >= 0.4) {
+      setScreenShake(true);
+      setFlashId(n => n + 1);
+      fxTimeout(() => setScreenShake(false), 400);
+    }
+  }
+
   function startGame(diff) {
+    clearFx();
     setDifficulty(diff);
     setRound(1); setEnemyMaxHp(50); setEnemyHp(50);
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
@@ -289,7 +325,7 @@ export default function App() {
       setMaxDmg(newMax);
       const newTotal = totalDmgDealt + dmg;
       setTotalDmgDealt(newTotal);
-      setShake(true); setTimeout(()=>setShake(false), 500);
+      playHitFx(dmg);
       setEnemyHp(newHp);
       setLog(prev=>[`⚔️ 턴${turn}: ${exprDisplay} = ${dmg}!`, ...prev.slice(0,4)]);
 
@@ -306,12 +342,19 @@ export default function App() {
         setScore({ base, perfect, allIn, multiplier, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
         setTotalScore(newTS);
         setRoundScores(newRS);
-        if (isGO) {
-          setPhase("gameover");
-          fetchPreRank(newTS, difficulty, round);
-        } else {
-          setPhase("result");
-        }
+        setSelected([]);
+        setPhase("kill");
+        setKillBanner(
+          perfect && allIn ? { text: "⚡ COMBO ×4!", color: "#fbbf24" }
+          : perfect ? { text: "✨ PERFECT!", color: "#4ade80" }
+          : allIn ? { text: "🃏 ALL IN!", color: "#fb923c" }
+          : { text: "💥 K.O.!", color: "#f87171" }
+        );
+        if (isGO) fetchPreRank(newTS, difficulty, round);
+        fxTimeout(() => {
+          setKillBanner(null);
+          setPhase(isGO ? "gameover" : "result");
+        }, 1200);
         return;
       }
       const usedIds = new Set(selected.map(c=>c.id));
@@ -336,6 +379,7 @@ export default function App() {
   }
 
   function nextRound() {
+    clearFx();
     const nr = round+1;
     const mhp = Math.floor(50*Math.pow(1.5,nr-1));
     setRound(nr); setEnemyMaxHp(mhp); setEnemyHp(mhp);
@@ -458,10 +502,20 @@ export default function App() {
 
   // ── 게임 화면 ──
   return (
-    <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
+    <div className={screenShake ? "screen-shake" : ""} style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
+
+      {/* 큰 타격 시 화면 번쩍임 */}
+      {flashId > 0 && <div key={flashId} className="hit-flash" style={{ position:"fixed", inset:0, background:"#fff", pointerEvents:"none", zIndex:90 }} />}
+
+      {/* 처치 배너 */}
+      {killBanner && (
+        <div className="kill-banner" style={{ position:"fixed", top:"40%", left:"50%", zIndex:95, pointerEvents:"none", whiteSpace:"nowrap", fontSize:"clamp(36px, 12vw, 64px)", fontWeight:900, color:killBanner.color, letterSpacing:2, textShadow:`0 0 24px ${killBanner.color}, 0 4px 0 rgba(0,0,0,0.6)` }}>
+          {killBanner.text}
+        </div>
+      )}
 
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) { fetchTop10(top10Tab); setScreen("select"); } }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
+        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
         <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
         <div style={{ width:60 }} />
       </div>
@@ -503,8 +557,20 @@ export default function App() {
       )}
 
       {/* Enemy */}
-      <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <img key={round} src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", transition:"transform 0.1s", transform:shake?"translateX(8px)":"none" }} />
+      <div style={{ position:"relative", background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
+        <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""} style={{ display:"inline-block" }}>
+          <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", display:"block" }} />
+        </div>
+        {dmgPops.map(p => (
+          <div key={p.id} className="dmg-pop" style={{
+            position:"absolute", top:40, left:"50%", pointerEvents:"none", whiteSpace:"nowrap",
+            fontSize: 26 + Math.min(p.ratio, 1) * 34, fontWeight:900,
+            color: p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
+            textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
+          }}>
+            {p.ratio>=0.5 && "💥"}-{p.dmg}
+          </div>
+        ))}
         <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
         <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
           <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
@@ -525,11 +591,12 @@ export default function App() {
 
       {/* Hand */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:7, justifyContent:"center", marginBottom:10, maxWidth:380 }}>
-        {hand.map(card=>{
+        {hand.map((card, i)=>{
           const isSel = !!selected.find(c=>c.id===card.id);
           const isOp = card.type==="op";
           return (
-            <div key={card.id} onClick={()=>toggleCard(card)} style={{
+            <div key={card.id} onClick={()=>toggleCard(card)} className="card-in" style={{
+              animationDelay: turn===1 ? `${i*60}ms` : "0ms",
               width:50, height:70, borderRadius:10, display:"flex", flexDirection:"column",
               alignItems:"center", justifyContent:"center", cursor:"pointer", fontWeight:"bold",
               fontSize: isOp?20:24,
@@ -549,7 +616,7 @@ export default function App() {
       {/* Buttons */}
       {phase==="play" && (
         <div style={{ display:"flex", gap:10, marginBottom:8 }}>
-          <button onClick={()=>endTurn(false)} disabled={!exprValue||exprValue<=0} style={{
+          <button onClick={()=>endTurn(false)} disabled={!exprValue||exprValue<=0} className={exprValue&&exprValue>0 ? "ready-pulse" : ""} style={{
             padding:"10px 22px", fontSize:14, fontWeight:"bold", borderRadius:30, border:"none",
             cursor:exprValue&&exprValue>0?"pointer":"not-allowed",
             background:exprValue&&exprValue>0?"linear-gradient(135deg,#dc2626,#ef4444)":"rgba(255,255,255,0.1)",
@@ -575,7 +642,7 @@ export default function App() {
       {/* Result / Gameover overlay */}
       {(phase==="result"||phase==="gameover") && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.82)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16, overflowY:"auto" }}>
-          <div style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%", margin:"auto" }}>
+          <div className="overlay-pop" style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%", margin:"auto" }}>
 
             {/* 헤더 */}
             {phase==="gameover"
@@ -688,7 +755,7 @@ export default function App() {
             {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (
               <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
                 <button onClick={()=>startGame(difficulty)} style={{ padding:"10px 18px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🔄 재도전</button>
-                <button onClick={()=>{ fetchTop10(top10Tab); setScreen("select"); }} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메인으로</button>
+                <button onClick={goMain} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메인으로</button>
               </div>
             )}
           </div>
