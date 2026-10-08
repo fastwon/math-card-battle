@@ -1,276 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "./supabase";
-import { play, isMuted, setMuted } from "./sfx";
-import { playBgm, isBgmMuted, setBgmMuted } from "./bgm";
-
-const OPS = ["+", "-", "×", "÷"];
-
-const DIFFICULTIES = {
-  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r },
-  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 2 },
-  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r },
-};
-
-function randInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-let _cardId = 0;
-function makeCard(type, value) {
-  return { type, value, id: ++_cardId };
-}
-function genCard(hand = []) {
-  const opCount = hand.filter(c => c.type === "op").length;
-  const isOp = opCount >= 4 ? false : Math.random() < 0.3;
-  if (isOp) {
-    const availableOps = OPS.filter(op => hand.filter(c => c.type === "op" && c.value === op).length < 3);
-    if (availableOps.length > 0) return makeCard("op", availableOps[Math.floor(Math.random() * availableOps.length)]);
-  }
-  return makeCard("num", randInt(1, 9));
-}
-function maxHandSize(round) {
-  if (round <= 2) return 7;
-  if (round <= 4) return 8;
-  if (round <= 6) return 9;
-  return 10;
-}
-function genHand(round) {
-  const size = Math.min(5, maxHandSize(round));
-  let hand = [], attempts = 0;
-  while (attempts++ < 200) {
-    hand = [];
-    for (let i = 0; i < size; i++) hand.push(genCard(hand));
-    if (hand.filter(c=>c.type==="num").length >= 2 && hand.filter(c=>c.type==="op").length >= 1) break;
-  }
-  return hand;
-}
-function parseExpression(selected) {
-  if (!selected.length) return null;
-  let tokens = [], i = 0;
-  while (i < selected.length) {
-    const c = selected[i];
-    if (c.type==="num" && i+2<selected.length &&
-        selected[i+1].type==="num" && selected[i+2].type==="num" &&
-        selected[i+1].value===c.value && selected[i+2].value===c.value) {
-      tokens.push({ type:"num", value: c.value**2, display:`${c.value}²` });
-      i += 3;
-    } else {
-      tokens.push({ ...c, display: String(c.value) });
-      i++;
-    }
-  }
-  if (tokens[0].type==="op" || tokens[tokens.length-1].type==="op") return null;
-  for (let j=0;j<tokens.length-1;j++) if (tokens[j].type===tokens[j+1].type) return null;
-  const exprStr = tokens.map(t => t.type==="op" ? (t.value==="×"?"*":t.value==="÷"?"/":t.value) : t.value).join(" ");
-  try {
-    // eslint-disable-next-line no-eval
-    const r = eval(exprStr);
-    if (!isFinite(r)||isNaN(r)) return null;
-    return { value: Math.floor(r), tokens };
-  } catch { return null; }
-}
-
-const ENEMIES = [
-  { name: "슬라임",   img: "/enemies/enemy1.png"  },
-  { name: "고블린",   img: "/enemies/enemy2.png"  },
-  { name: "해적",     img: "/enemies/enemy3.png"  },
-  { name: "기사",     img: "/enemies/enemy4.png"  },
-  { name: "마법사",   img: "/enemies/enemy5.png"  },
-  { name: "드래곤",   img: "/enemies/enemy6.png"  },
-  { name: "악마",     img: "/enemies/enemy7.png"  },
-  { name: "해골왕",   img: "/enemies/enemy8.png"  },
-  { name: "외계인",   img: "/enemies/enemy9.png"  },
-  { name: "마왕",     img: "/enemies/enemy10.png" },
-];
-function getEnemy(round) {
-  return ENEMIES[(round - 1) % ENEMIES.length];
-}
-
-const SITE_URL = "https://math-card-battle.vercel.app";
-
-// 텍스트 복사 (clipboard API가 막힌 환경 대비 fallback 포함)
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch { /* 무시 */ }
-    ta.remove();
-    return ok;
-  }
-}
-
-const rankColor = i => i===0?"#fbbf24":i===1?"#d1d5db":i===2?"#cd7f32":"#9ca3af";
-
-function RankRow({ rank, entry }) {
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 8px", borderRadius:8 }}>
-      <span style={{ color: rankColor(rank-1), fontWeight:"bold", width:32, fontSize:13 }}>{rank}등</span>
-      <span style={{ flex:1, color:"#fff", fontWeight:"bold", fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{entry.nickname}</span>
-      <span style={{ color:"#a78bfa", fontSize:12, whiteSpace:"nowrap" }}>R{entry.round}</span>
-      <span style={{ color:"#fbbf24", fontWeight:"bold", fontSize:13, whiteSpace:"nowrap" }}>{entry.score}점</span>
-    </div>
-  );
-}
-
-// 🎵 배경음악 / 🔊 효과음 각각 켜고 끄기
-function SoundButtons({ style }) {
-  const [sfxMuted, setSfxM] = useState(isMuted());
-  const [bgmMuted, setBgmM] = useState(isBgmMuted());
-  const btn = { width:30, height:28, borderRadius:10, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.07)", cursor:"pointer", fontSize:13, lineHeight:1, padding:0 };
-  function toggleBgm() {
-    setBgmMuted(!bgmMuted);
-    setBgmM(!bgmMuted);
-  }
-  function toggleSfx() {
-    setMuted(!sfxMuted);
-    setSfxM(!sfxMuted);
-    if (sfxMuted) play("click");
-  }
-  return (
-    <div style={{ display:"flex", gap:4, ...style }}>
-      <button onClick={toggleBgm} title={bgmMuted ? "배경음악 켜기" : "배경음악 끄기"} style={{ ...btn, opacity: bgmMuted ? 0.4 : 1, textDecoration: bgmMuted ? "line-through" : "none" }}>🎵</button>
-      <button onClick={toggleSfx} title={sfxMuted ? "효과음 켜기" : "효과음 끄기"} style={btn}>{sfxMuted ? "🔇" : "🔊"}</button>
-    </div>
-  );
-}
-
-// 메인 배경에 떠오르는 카드 (x: 가로 %, dur: 초, delay: 음수로 시작 위치 분산)
-const BG_CARDS = [
-  { v:"7", x:6,  dur:16, delay:-2,  size:1.0 },
-  { v:"×", x:22, dur:20, delay:-11, size:0.8 },
-  { v:"3", x:38, dur:18, delay:-6,  size:0.7 },
-  { v:"+", x:55, dur:22, delay:-15, size:0.9 },
-  { v:"9", x:72, dur:17, delay:-3,  size:1.1 },
-  { v:"÷", x:88, dur:19, delay:-9,  size:0.8 },
-  { v:"5", x:14, dur:21, delay:-17, size:0.8 },
-  { v:"−", x:46, dur:15, delay:-12, size:1.0 },
-  { v:"8", x:64, dur:23, delay:-19, size:0.7 },
-  { v:"²", x:80, dur:18, delay:-14, size:0.9 },
-];
-
-function FloatingCards() {
-  return (
-    <div aria-hidden style={{ position:"fixed", inset:0, overflow:"hidden", pointerEvents:"none", zIndex:0 }}>
-      {BG_CARDS.map((c, i) => {
-        const isOp = !/\d/.test(c.v);
-        return (
-          <div key={i} className="bg-card" style={{
-            position:"absolute", top:"105%", left:`${c.x}%`,
-            width:44*c.size, height:62*c.size, borderRadius:8,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:24*c.size, fontWeight:"bold", color:"#fff", opacity:0.13,
-            background: isOp ? "linear-gradient(135deg,#4c1d95,#a855f7)" : "linear-gradient(135deg,#1e3a8a,#3b82f6)",
-            border:"2px solid rgba(255,255,255,0.5)",
-            animationDuration:`${c.dur}s`, animationDelay:`${c.delay}s`,
-          }}>{c.v}</div>
-        );
-      })}
-    </div>
-  );
-}
-
-// 메인 화면 자동 시연: 카드가 놓이고 → 수식 결과 → 적 피격, 반복
-const DEMOS = [
-  { cards:["7","×","8"], result:"56" },
-  { cards:["9","9","9"], result:"81", note:"같은 숫자 3장 = 제곱!" },
-  { cards:["6","+","4","×","9"], result:"42" },
-];
-
-const DEMO_ENEMY_COUNT = 7; // 후반 보스(R8~)는 메인에서 숨김
-
-function HeroDemo() {
-  const [tick, setTick] = useState(0);
-  const [cycle, setCycle] = useState(0);
-  const demo = DEMOS[cycle % DEMOS.length];
-  const enemyIdx = cycle % DEMO_ENEMY_COUNT;
-  const enemy = ENEMIES[enemyIdx];
-  const n = demo.cards.length;
-  const showResult = tick > n;
-  const hit = tick >= n + 2;
-
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 420);
-    return () => clearInterval(id);
-  }, []);
-  useEffect(() => {
-    if (tick > n + 5) { setTick(0); setCycle(c => c + 1); }
-  }, [tick, n]);
-
-  return (
-    <div style={{ position:"relative", width:"100%", maxWidth:340, background:"rgba(0,0,0,0.28)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:16, padding:"10px 12px 12px", marginBottom:16 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-        {/* 적 */}
-        <div style={{ position:"relative", width:92, flexShrink:0, textAlign:"center" }}>
-          <div key={`${cycle}-${hit}`} className={hit ? "enemy-hit" : "bob"} style={{ display:"inline-block" }}>
-            <img src={enemy.img} alt={enemy.name} style={{ width:84, height:84, objectFit:"contain", display:"block" }} />
-          </div>
-          {hit && (
-            <div key={`pop-${cycle}`} className="dmg-pop" style={{ position:"absolute", top:16, left:"50%", fontSize:24, fontWeight:900, color:"#fbbf24", textShadow:"0 0 10px rgba(239,68,68,0.9), 0 2px 0 #000", whiteSpace:"nowrap", pointerEvents:"none" }}>
-              -{demo.result}
-            </div>
-          )}
-          <div style={{ fontSize:10, color:"#a78bfa" }}>R{enemyIdx + 1} {enemy.name}</div>
-        </div>
-
-        {/* 카드 + 결과 */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", gap:4, justifyContent:"center", minHeight:50, alignItems:"center" }}>
-            {demo.cards.slice(0, Math.min(tick, n)).map((v, i) => {
-              const isOp = !/\d/.test(v);
-              return (
-                <div key={`${cycle}-${i}`} className="card-in" style={{
-                  width:32, height:46, borderRadius:7, flexShrink:0,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:isOp?16:19, fontWeight:"bold", color:"#fff",
-                  background: isOp ? "linear-gradient(135deg,#7c3aed,#a855f7)" : "linear-gradient(135deg,#1d4ed8,#3b82f6)",
-                  border:"2px solid rgba(255,255,255,0.7)", boxShadow:"0 2px 6px rgba(0,0,0,0.4)",
-                }}>{v}</div>
-              );
-            })}
-          </div>
-          <div style={{ height:38, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-            {showResult && (
-              <>
-                <div key={`r-${cycle}`} className="result-pop" style={{ fontSize:20, fontWeight:900, color:"#4ade80" }}>= {demo.result} ⚔️</div>
-                {demo.note && <div style={{ fontSize:10, color:"#fbbf24" }}>{demo.note}</div>}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DiffTabs({ active, onChange }) {
-  return (
-    <div style={{ display:"flex", gap:4, marginBottom:12 }}>
-      {Object.entries(DIFFICULTIES).map(([key, d]) => (
-        <button key={key} onClick={() => onChange(key)} style={{
-          flex:1, padding:"7px 0", borderRadius:8, border:"none",
-          background: active===key ? d.color : "rgba(255,255,255,0.07)",
-          color: active===key ? "#fff" : "#9ca3af",
-          fontWeight:"bold", fontSize:12, cursor:"pointer", transition:"all 0.2s",
-        }}>
-          {d.emoji} {d.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+import { play } from "./sfx";
+import { playBgm } from "./bgm";
+import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, parseExpression, enemyMaxHpFor, turnLimit } from "./game/rules";
+import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
+import { shareOrCopy } from "./utils/share";
+import MainScreen from "./screens/MainScreen";
+import RankingScreen from "./screens/RankingScreen";
+import GameScreen from "./screens/GameScreen";
+import ResultOverlay from "./screens/ResultOverlay";
 
 export default function App() {
   const [screen, setScreen] = useState("select");
   const [difficulty, setDifficulty] = useState(null);
-  const [showRules, setShowRules] = useState(false);
-  const [showScoreDetail, setShowScoreDetail] = useState(false);
 
   // 랭킹
   const [top10, setTop10] = useState([]);
@@ -287,21 +28,13 @@ export default function App() {
 
   // 게임 상태
   const [round, setRound] = useState(1);
-  const [enemyMaxHp, setEnemyMaxHp] = useState(50);
-  const [enemyHp, setEnemyHp] = useState(50);
+  const [enemyMaxHp, setEnemyMaxHp] = useState(enemyMaxHpFor(1));
+  const [enemyHp, setEnemyHp] = useState(enemyMaxHpFor(1));
   const [hand, setHand] = useState([]);
   const [selected, setSelected] = useState([]);
   const [turn, setTurn] = useState(1);
   const [log, setLog] = useState([]);
   const [phase, setPhase] = useState("play");
-  const [lastDmg, setLastDmg] = useState(null);
-  // 타격 연출
-  const [hitId, setHitId] = useState(0);
-  const [dmgPops, setDmgPops] = useState([]);
-  const [screenShake, setScreenShake] = useState(false);
-  const [flashId, setFlashId] = useState(0);
-  const [killBanner, setKillBanner] = useState(null);
-  const fxTimers = useRef([]);
   const [maxDmg, setMaxDmg] = useState(0);
   const [totalDmgDealt, setTotalDmgDealt] = useState(0);
   const [score, setScore] = useState(null);
@@ -310,13 +43,19 @@ export default function App() {
   const [finalRank, setFinalRank] = useState(null);
   const [shareMsg, setShareMsg] = useState(null);
 
+  // 타격 연출
+  const [hitId, setHitId] = useState(0);
+  const [dmgPops, setDmgPops] = useState([]);
+  const [screenShake, setScreenShake] = useState(false);
+  const [flashId, setFlashId] = useState(0);
+  const [killBanner, setKillBanner] = useState(null);
+  const fxTimers = useRef([]);
+
   // 닉네임
   const [nickname, setNickname] = useState("");
   const [nicknameSubmitted, setNicknameSubmitted] = useState(false);
   const [registrationSkipped, setRegistrationSkipped] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const registrationDecided = nicknameSubmitted || registrationSkipped;
 
   useEffect(() => { fetchTop10("easy"); }, []);
 
@@ -328,31 +67,25 @@ export default function App() {
     else playBgm("boss", Math.min(150 + (round - 7) * 2, 166));
   }, [screen, phase, round]);
 
+  // ── 랭킹 ──
   async function fetchTop10(tab) {
-    const { data, error } = await supabase
-      .from("rankings").select("*").eq("difficulty", tab)
-      .order("round", { ascending: false }).order("score", { ascending: false }).limit(10);
+    const { data, error } = await fetchRankings(tab, 10);
     if (error) console.error("TOP10 로드 실패:", error.message);
     if (data) setTop10(data);
   }
 
-  async function handleTop10Tab(tab) {
+  function handleTop10Tab(tab) {
     setTop10Tab(tab);
     fetchTop10(tab);
   }
 
-  async function fetchPreRank(scoreVal, diff, currentRound) {
+  async function loadPreRank(scoreVal, diff, currentRound) {
     setPreRankLoading(true);
-    const finalScore = Math.round(scoreVal * 100) / 100;
-    const { count } = await supabase
-      .from("rankings").select("*", { count: "exact", head: true })
-      .eq("difficulty", diff)
-      .or(`round.gt.${currentRound},and(round.eq.${currentRound},score.gt.${finalScore})`);
-    setPreRank((count ?? 0) + 1);
+    setPreRank(await fetchPreRank(scoreVal, diff, currentRound));
     setPreRankLoading(false);
   }
 
-  async function openRankings() {
+  function openRankings() {
     setScreen("rankings");
     setSearchQuery("");
     setRankingsError(null);
@@ -360,7 +93,7 @@ export default function App() {
     fetchRankingList("", "easy");
   }
 
-  async function handleRankingsTab(tab) {
+  function handleRankingsTab(tab) {
     setRankingsTab(tab);
     setSearchQuery("");
     fetchRankingList("", tab);
@@ -369,10 +102,7 @@ export default function App() {
   async function fetchRankingList(query, tab) {
     setSearchLoading(true);
     setRankingsError(null);
-    let req = supabase.from("rankings").select("*")
-      .eq("difficulty", tab).order("round", { ascending: false }).order("score", { ascending: false }).limit(100);
-    if (query.trim() !== "") req = req.ilike("nickname", `%${query.trim()}%`);
-    const { data, error } = await req;
+    const { data, error } = await fetchRankings(tab, 100, query);
     if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
     if (data) setAllRankings(data);
     setSearchLoading(false);
@@ -388,18 +118,14 @@ export default function App() {
     if (!nickname.trim() || submitting) return;
     setSubmitting(true);
     setSubmitError(null);
-    const finalScore = Math.round(currentTotalScore * 100) / 100;
-    const { error: insertError } = await supabase.from("rankings").insert([{
-      nickname: nickname.trim(), score: finalScore, difficulty, round,
-    }]);
+    const finalScore = roundScore(currentTotalScore);
+    const { error: insertError } = await insertRanking({ nickname: nickname.trim(), score: finalScore, difficulty, round });
     if (insertError) {
       setSubmitError("등록에 실패했습니다. 다시 시도해주세요.");
       setSubmitting(false);
       return;
     }
-    const { data, error: fetchError } = await supabase
-      .from("rankings").select("*").eq("difficulty", difficulty)
-      .order("round", { ascending: false }).order("score", { ascending: false }).limit(100);
+    const { data, error: fetchError } = await fetchRankings(difficulty, 100);
     if (fetchError) {
       setSubmitError("순위를 불러오지 못했습니다.");
       setSubmitting(false);
@@ -414,10 +140,7 @@ export default function App() {
     setSubmitting(false);
   }
 
-  const parsed = selected.length > 0 ? parseExpression(selected) : null;
-  const exprValue = parsed?.value ?? null;
-  const exprDisplay = parsed ? parsed.tokens.map(t=>t.display).join(" ") : selected.map(c=>c.value).join(" ");
-
+  // ── 연출 ──
   function fxTimeout(fn, ms) {
     fxTimers.current.push(setTimeout(fn, ms));
   }
@@ -427,12 +150,6 @@ export default function App() {
     setDmgPops([]); setKillBanner(null); setScreenShake(false); setHitId(0);
   }
   useEffect(() => clearFx, []);
-
-  function goMain() {
-    clearFx();
-    fetchTop10(top10Tab);
-    setScreen("select");
-  }
 
   function playHitFx(dmg) {
     const ratio = dmg / enemyMaxHp;
@@ -454,29 +171,30 @@ export default function App() {
     const rankText = nicknameSubmitted && finalRank ? ` (${d.label} ${finalRank}위!)` : "";
     const body = `🃏 수학 카드 배틀 ${d.emoji} ${d.label}\nR${round}까지 도달! 총점 ${total}점${rankText}\n나를 이길 수 있어?`;
     play("click");
-
-    // 휴대폰: 기기 공유 창(카톡·문자 등) / PC: 클립보드 복사
-    const isTouch = window.matchMedia?.("(pointer: coarse)").matches;
-    if (isTouch && navigator.share) {
-      try {
-        await navigator.share({ title: "수학 카드 배틀", text: body, url: SITE_URL });
-        return;
-      } catch (e) {
-        if (e?.name === "AbortError") return; // 사용자가 공유 창을 닫음
-      }
-    }
-    const ok = await copyText(`${body}\n👉 ${SITE_URL}`);
-    setShareMsg(ok ? "📋 복사했어요! 친구에게 붙여넣기 하세요" : "복사에 실패했어요");
+    const res = await shareOrCopy(body);
+    if (res === "shared" || res === "aborted") return;
+    setShareMsg(res === "copied" ? "📋 복사했어요! 친구에게 붙여넣기 하세요" : "복사에 실패했어요");
     fxTimeout(() => setShareMsg(null), 2500);
+  }
+
+  // ── 게임 진행 ──
+  const parsed = selected.length > 0 ? parseExpression(selected) : null;
+  const exprValue = parsed?.value ?? null;
+  const exprDisplay = parsed ? parsed.tokens.map(t=>t.display).join(" ") : selected.map(c=>c.value).join(" ");
+
+  function goMain() {
+    clearFx();
+    fetchTop10(top10Tab);
+    setScreen("select");
   }
 
   function startGame(diff) {
     clearFx();
     play("click");
     setDifficulty(diff);
-    setRound(1); setEnemyMaxHp(50); setEnemyHp(50);
+    setRound(1); setEnemyMaxHp(enemyMaxHpFor(1)); setEnemyHp(enemyMaxHpFor(1));
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
-    setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
+    setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
     setNickname(""); setNicknameSubmitted(false); setRegistrationSkipped(false);
     setSubmitting(false); setPreRank(null); setShareMsg(null);
@@ -490,16 +208,11 @@ export default function App() {
     setSelected(prev => isSel ? prev.filter(c=>c.id!==card.id) : [...prev, card]);
   }
 
-  function addCard(h, r) {
-    if (h.length >= maxHandSize(r)) return h;
-    return [...h, genCard(h)];
-  }
-
   function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, isTurnLimit = false) {
     setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: isTurnLimit });
     setTotalScore(newTS);
     setPhase("gameover");
-    fetchPreRank(newTS, currentDiff, currentRound);
+    loadPreRank(newTS, currentDiff, currentRound);
   }
 
   function endTurn(skip = false) {
@@ -508,7 +221,6 @@ export default function App() {
       if (!exprValue || exprValue <= 0) return;
       const dmg = exprValue;
       const newHp = Math.max(0, enemyHp - dmg);
-      setLastDmg(dmg);
       const newMax = Math.max(maxDmg, dmg);
       setMaxDmg(newMax);
       const newTotal = totalDmgDealt + dmg;
@@ -521,8 +233,8 @@ export default function App() {
         const perfect = newTotal === enemyMaxHp;
         const allIn = selected.length === hand.length;
         const multiplier = (perfect ? 2 : 1) * (allIn ? 2 : 1);
-        const base = Math.round((newMax / turn) * 100) / 100;
-        const fs = Math.round(base * multiplier * 100) / 100;
+        const base = roundScore(newMax / turn);
+        const fs = roundScore(base * multiplier);
         const thresh = DIFFICULTIES[difficulty].threshold(round);
         const isGO = fs <= thresh;
         const newTS = totalScore + fs;
@@ -538,7 +250,7 @@ export default function App() {
           : allIn ? { text: "🃏 ALL IN!", color: "#fb923c" }
           : { text: "💥 K.O.!", color: "#f87171" }
         );
-        if (isGO) fetchPreRank(newTS, difficulty, round);
+        if (isGO) loadPreRank(newTS, difficulty, round);
         play("kill");
         if (perfect && allIn) play("combo");
         else if (perfect) play("perfect");
@@ -559,12 +271,13 @@ export default function App() {
     setSelected([]);
 
     const nextTurn = turn + 1;
-    if (nextTurn > 5 + round * 5) {
+    if (nextTurn > turnLimit(round)) {
       const thresh = DIFFICULTIES[difficulty].threshold(round);
       play("gameOver");
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
       return;
     }
+    // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
     if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4 && !newHand.some(c => c.type === "op" && c.value === "×")) {
       setHand(newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand);
     } else {
@@ -578,423 +291,60 @@ export default function App() {
     clearFx();
     play("click");
     const nr = round+1;
-    const mhp = Math.floor(50*Math.pow(1.5,nr-1));
+    const mhp = enemyMaxHpFor(nr);
     setRound(nr); setEnemyMaxHp(mhp); setEnemyHp(mhp);
     setHand(genHand(nr)); setSelected([]); setTurn(1); setLog([]);
-    setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setPhase("play");
+    setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setPhase("play");
   }
 
-  const hpPct = Math.max(0,(enemyHp/enemyMaxHp)*100);
-  const hpColor = hpPct>50?"#4ade80":hpPct>25?"#facc15":"#f87171";
-  const maxSize = maxHandSize(round);
-  const diff = difficulty ? DIFFICULTIES[difficulty] : null;
-
-  // ── 전체 랭킹 화면 ──
+  // ── 화면 ──
   if (screen === "rankings") {
     return (
-      <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"24px 16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff" }}>
-        <div style={{ width:"100%", maxWidth:400 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-            <button onClick={()=>setScreen("select")} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#fff", padding:"6px 14px", cursor:"pointer", fontSize:13 }}>← 뒤로</button>
-            <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc" }}>🏅 전체 랭킹</div>
-          </div>
-
-          <DiffTabs active={rankingsTab} onChange={handleRankingsTab} />
-
-          <input
-            value={searchQuery}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="닉네임 검색..."
-            style={{ width:"100%", padding:"10px 14px", borderRadius:12, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:12, boxSizing:"border-box" }}
-          />
-
-          {rankingsError
-            ? <div style={{ color:"#f87171", fontSize:13, marginBottom:10, padding:"10px 14px", background:"rgba(239,68,68,0.1)", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)" }}>{rankingsError}</div>
-            : <div style={{ fontSize:12, color:"#6b7280", marginBottom:10 }}>{searchLoading ? "검색 중..." : `${allRankings.length}명 표시 중 (최대 100명)`}</div>
-          }
-
-          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-            {allRankings.map((entry, i) => (
-              <RankRow key={entry.id} rank={i+1} entry={entry} />
-            ))}
-            {allRankings.length === 0 && !searchLoading && !rankingsError && (
-              <div style={{ color:"#6b7280", textAlign:"center", padding:"40px 0" }}>검색 결과가 없습니다</div>
-            )}
-          </div>
-        </div>
-      </div>
+      <RankingScreen
+        tab={rankingsTab} onTab={handleRankingsTab}
+        query={searchQuery} onSearch={handleSearch}
+        rankings={allRankings} loading={searchLoading} error={rankingsError}
+        onBack={()=>setScreen("select")}
+      />
     );
   }
 
-  // ── 메인 화면 ──
   if (screen === "select") {
     return (
-      <div style={{ position:"relative", minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
-        <FloatingCards />
-        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", padding:"16px 16px 28px" }}>
-
-        {/* 상단 바: 규칙 / 음소거 */}
-        <div style={{ width:"100%", maxWidth:340, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <button onClick={()=>setShowRules(true)} style={{ height:28, padding:"0 12px", borderRadius:10, border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:12, fontWeight:"bold", cursor:"pointer" }}>📖 게임 규칙</button>
-          <SoundButtons />
-        </div>
-
-        {/* 타이틀 */}
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-          <span className="bob" style={{ fontSize:"clamp(20px, 6vw, 26px)" }}>✨</span>
-          <h1 className="title-shine" style={{
-            fontSize:"clamp(28px, 9vw, 38px)", fontWeight:900, letterSpacing:2, whiteSpace:"nowrap",
-            background:"linear-gradient(90deg,#c084fc,#f0abfc,#fbbf24,#f0abfc,#c084fc)", backgroundSize:"200% auto",
-            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
-            filter:"drop-shadow(0 2px 8px rgba(192,132,252,0.5))",
-          }}>수학 카드 배틀</h1>
-          <span className="bob" style={{ fontSize:"clamp(20px, 6vw, 26px)", animationDelay:"-1.2s" }}>✨</span>
-        </div>
-        <div style={{ color:"#d1d5db", fontSize:13, marginBottom:14, textAlign:"center" }}>
-          카드로 <strong style={{ color:"#4ade80" }}>수식</strong>을 만들어 몬스터를 쓰러뜨려라!
-        </div>
-
-        <HeroDemo />
-
-        {/* 난이도 선택 */}
-        <div style={{ color:"#9ca3af", fontSize:12, marginBottom:8 }}>▼ 난이도를 골라 바로 시작 ▼</div>
-        <div style={{ display:"flex", gap:8, width:"100%", maxWidth:340 }}>
-          {Object.entries(DIFFICULTIES).map(([key, d]) => (
-            <button key={key} onClick={()=>startGame(key)} style={{
-              flex:1, minWidth:0, padding:"12px 4px", borderRadius:14, border:`2px solid ${d.color}`,
-              background:`linear-gradient(180deg, ${d.color}33, rgba(0,0,0,0.35))`, color:"#fff", cursor:"pointer",
-              boxShadow:`0 4px 14px ${d.color}44`, transition:"transform 0.15s, background 0.2s",
-            }}
-            onMouseOver={e=>e.currentTarget.style.background=`${d.color}55`}
-            onMouseOut={e=>e.currentTarget.style.background=`linear-gradient(180deg, ${d.color}33, rgba(0,0,0,0.35))`}
-            onPointerDown={e=>e.currentTarget.style.transform="scale(0.95)"}
-            onPointerUp={e=>e.currentTarget.style.transform="none"}
-            onPointerLeave={e=>e.currentTarget.style.transform="none"}
-            >
-              <div style={{ fontSize:26, marginBottom:2 }}>{d.emoji}</div>
-              <div style={{ color:"#fff", fontSize:16, fontWeight:"bold" }}>{d.label}</div>
-              <div style={{ fontSize:10, color:"#d1d5db", marginTop:3, whiteSpace:"nowrap" }}>
-                {key==="easy" ? "기준 R점" : key==="normal" ? "기준 R×2점" : "기준 R²점"}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* TOP 10 */}
-        <div style={{ marginTop:20, width:"100%", maxWidth:340, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
-          <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 TOP 10</div>
-          <DiffTabs active={top10Tab} onChange={handleTop10Tab} />
-          <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-            {top10.length > 0
-              ? top10.map((r, i) => <RankRow key={r.id} rank={i+1} entry={r} />)
-              : <div style={{ color:"#6b7280", fontSize:12, textAlign:"center", padding:"12px 0" }}>아직 기록이 없습니다</div>
-            }
-          </div>
-          <button onClick={openRankings} style={{
-            marginTop:12, width:"100%", padding:"8px 0", borderRadius:10,
-            border:"1px solid rgba(192,132,252,0.4)", background:"rgba(192,132,252,0.1)",
-            color:"#c084fc", fontSize:13, fontWeight:"bold", cursor:"pointer",
-          }}>전체 랭킹 보기 →</button>
-        </div>
-
-        </div>
-
-        {/* 규칙 팝업 */}
-        {showRules && (
-          <div onClick={()=>setShowRules(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
-            <div onClick={e=>e.stopPropagation()} style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"24px 28px", border:"2px solid rgba(192,132,252,0.4)", maxWidth:520, width:"100%", maxHeight:"85vh", overflowY:"auto" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
-                <div style={{ fontSize:17, fontWeight:"bold", color:"#c084fc" }}>📖 게임 규칙</div>
-                <button onClick={()=>setShowRules(false)} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"#9ca3af", padding:"4px 10px", cursor:"pointer", fontSize:13 }}>✕ 닫기</button>
-              </div>
-              {[
-                { emoji:"⚔️", title:"기본 진행", items:["손패에서 카드를 선택해 수식을 만들고 공격","적의 HP를 0으로 만들면 라운드 클리어","공격 후 사용한 카드는 사라지고 매 턴 카드 1장 추가","카드를 쓰기 싫으면 '턴 종료'로 넘길 수 있음","손패 최대 크기: R1~2=7장 / R3~4=8장 / R5~6=9장 / R7~=10장"] },
-                { emoji:"🃏", title:"카드 & 수식 규칙", items:["숫자와 연산자를 번갈아 선택 (숫자→연산→숫자→...)","첫 카드와 마지막 카드는 반드시 숫자","결과가 0 이하면 공격 불가","같은 숫자 3장을 연속 선택하면 제곱으로 변환 (예: 3 3 3 → 3² = 9)"] },
-                { emoji:"🏆", title:"점수 계산", items:["라운드 점수 = 최고 데미지 ÷ 클리어 턴","적 HP를 딱 맞게 0으로 → 퍼펙트 클리어! ✨ 점수 ×2","손패의 모든 카드를 사용해서 처치 → 올 인! 🃏 점수 ×2","퍼펙트 클리어 + 올 인 동시 달성 → ⚡ 콤보! 점수 ×4","총점 = 각 라운드 점수의 합"] },
-                { emoji:"💀", title:"게임오버 조건", items:["라운드 점수가 기준 이하면 게임오버","이지: 기준 = 라운드 수 / 노말: 기준 = 라운드×2 / 하드: 기준 = 라운드²","라운드당 최대 턴 수(5 + 라운드×5) 초과 시에도 게임오버"] },
-              ].map(section => (
-                <div key={section.title} style={{ marginBottom:16 }}>
-                  <div style={{ color:"#a78bfa", fontWeight:"bold", fontSize:13, marginBottom:6 }}>{section.emoji} {section.title}</div>
-                  {section.items.map((item, i) => (
-                    <div key={i} style={{ color:"#d1d5db", fontSize:12, lineHeight:1.8, paddingLeft:8 }}>• {item}</div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <MainScreen
+        top10={top10} top10Tab={top10Tab} onTop10Tab={handleTop10Tab}
+        onStart={startGame} onOpenRankings={openRankings}
+      />
     );
   }
 
-  // ── 게임 화면 ──
   return (
-    <div className={screenShake ? "screen-shake" : ""} style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
-
-      {/* 큰 타격 시 화면 번쩍임 */}
-      {flashId > 0 && <div key={flashId} className="hit-flash" style={{ position:"fixed", inset:0, background:"#fff", pointerEvents:"none", zIndex:90 }} />}
-
-      {/* 처치 배너 */}
-      {killBanner && (
-        <div className="kill-banner" style={{ position:"fixed", top:"40%", left:"50%", zIndex:95, pointerEvents:"none", whiteSpace:"nowrap", fontSize:"clamp(36px, 12vw, 64px)", fontWeight:900, color:killBanner.color, letterSpacing:2, textShadow:`0 0 24px ${killBanner.color}, 0 4px 0 rgba(0,0,0,0.6)` }}>
-          {killBanner.text}
-        </div>
-      )}
-
-      <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
-        <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
-        <SoundButtons style={{ width:64, flexShrink:0, justifyContent:"flex-end" }} />
-      </div>
-
-      {/* Status bar */}
-      <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
-        <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
-        <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
-        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{5 + round*5}</span>
-        <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
-      </div>
-
-      {/* 총점 (hover/click 시 라운드별 상세) */}
-      {roundScores.length > 0 && (
-        <div style={{ position:"relative", marginBottom:10 }}>
-          <div
-            onClick={() => setShowScoreDetail(v => !v)}
-            onMouseEnter={() => setShowScoreDetail(true)}
-            onMouseLeave={() => setShowScoreDetail(false)}
-            style={{ background:"rgba(0,0,0,0.3)", borderRadius:20, padding:"5px 16px", fontSize:13, color:"#fbbf24", fontWeight:"bold", cursor:"pointer", border:"1px solid rgba(251,191,36,0.3)", userSelect:"none" }}
-          >
-            💰 TOTAL {totalScore.toFixed(2)}점 ▾
-          </div>
-          {showScoreDetail && (
-            <div style={{ position:"absolute", top:"110%", left:"50%", transform:"translateX(-50%)", background:"rgba(15,12,41,0.97)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:12, padding:"10px 14px", zIndex:50, minWidth:200, boxShadow:"0 8px 24px rgba(0,0,0,0.6)" }}>
-              {roundScores.map((r,i) => (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", gap:16, fontSize:12, padding:"3px 0", color: r.perfect&&r.allIn?"#fbbf24":r.perfect?"#4ade80":r.allIn?"#fb923c":"#d1d5db", borderBottom: i<roundScores.length-1?"1px solid rgba(255,255,255,0.06)":"none" }}>
-                  <span>R{r.round}{r.perfect?" ✨":""}{r.allIn?" 🃏":""}</span>
-                  <span style={{ fontWeight:"bold" }}>{r.score.toFixed(2)}점</span>
-                </div>
-              ))}
-              <div style={{ borderTop:"1px solid rgba(255,255,255,0.2)", marginTop:6, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:13, color:"#fbbf24", fontWeight:"bold" }}>
-                <span>TOTAL</span>
-                <span>{totalScore.toFixed(2)}점</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Enemy */}
-      <div style={{ position:"relative", background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""} style={{ display:"inline-block" }}>
-          <img src={getEnemy(round).img} alt={getEnemy(round).name} style={{ width:140, height:140, objectFit:"contain", display:"block" }} />
-        </div>
-        {dmgPops.map(p => (
-          <div key={p.id} className="dmg-pop" style={{
-            position:"absolute", top:40, left:"50%", pointerEvents:"none", whiteSpace:"nowrap",
-            fontSize: 26 + Math.min(p.ratio, 1) * 34, fontWeight:900,
-            color: p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
-            textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
-          }}>
-            {p.ratio>=0.5 && "💥"}-{p.dmg}
-          </div>
-        ))}
-        <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{getEnemy(round).name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
-        <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
-          <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
-        </div>
-        <div style={{ fontSize:12, color:"#d1d5db" }}>HP: {enemyHp} / {enemyMaxHp}</div>
-      </div>
-
-      {/* Expression */}
-      <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:12, padding:"8px 16px", marginBottom:10, minWidth:200, textAlign:"center", border:"1px solid rgba(255,255,255,0.1)", maxWidth:340 }}>
-        {selected.length===0
-          ? <span style={{ color:"#6b7280", fontSize:13 }}>카드를 선택하세요</span>
-          : <span style={{ fontSize:16, letterSpacing:2 }}>
-              {exprDisplay}
-              {exprValue!==null ? <span style={{ color:"#4ade80" }}> = {exprValue}</span> : <span style={{ color:"#f87171" }}> ✗</span>}
-            </span>
-        }
-      </div>
-
-      {/* Hand */}
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7, justifyContent:"center", marginBottom:10, maxWidth:380 }}>
-        {hand.map((card, i)=>{
-          const isSel = !!selected.find(c=>c.id===card.id);
-          const isOp = card.type==="op";
-          return (
-            <div key={card.id} onClick={()=>toggleCard(card)} className="card-in" style={{
-              animationDelay: turn===1 ? `${i*60}ms` : "0ms",
-              width:50, height:70, borderRadius:10, display:"flex", flexDirection:"column",
-              alignItems:"center", justifyContent:"center", cursor:"pointer", fontWeight:"bold",
-              fontSize: isOp?20:24,
-              background: isSel ? (isOp?"linear-gradient(135deg,#7c3aed,#a855f7)":"linear-gradient(135deg,#1d4ed8,#3b82f6)") : (isOp?"linear-gradient(135deg,#4c1d95,#6d28d9)":"linear-gradient(135deg,#1e3a8a,#1d4ed8)"),
-              border: isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
-              boxShadow: isSel?"0 0 12px rgba(255,255,255,0.4)":"0 2px 6px rgba(0,0,0,0.4)",
-              transform: isSel?"translateY(-8px) scale(1.05)":"none",
-              transition:"all 0.2s", userSelect:"none", color:"#fff",
-            }}>
-              <div>{card.value}</div>
-              <div style={{ fontSize:9, marginTop:2, opacity:0.7 }}>{isOp?"연산":"숫자"}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Buttons */}
-      {phase==="play" && (
-        <div style={{ display:"flex", gap:10, marginBottom:8 }}>
-          <button onClick={()=>endTurn(false)} disabled={!exprValue||exprValue<=0} className={exprValue&&exprValue>0 ? "ready-pulse" : ""} style={{
-            padding:"10px 22px", fontSize:14, fontWeight:"bold", borderRadius:30, border:"none",
-            cursor:exprValue&&exprValue>0?"pointer":"not-allowed",
-            background:exprValue&&exprValue>0?"linear-gradient(135deg,#dc2626,#ef4444)":"rgba(255,255,255,0.1)",
-            color:"#fff", boxShadow:exprValue&&exprValue>0?"0 4px 15px rgba(239,68,68,0.5)":"none",
-          }}>⚔️ 공격! {exprValue&&exprValue>0?`(${exprValue})`:""}</button>
-          <button onClick={()=>endTurn(true)} style={{
-            padding:"10px 14px", fontSize:14, fontWeight:"bold", borderRadius:30,
-            border:"2px solid rgba(255,255,255,0.2)", cursor:"pointer",
-            background:"rgba(255,255,255,0.07)", color:"#9ca3af",
-          }}>💤 턴 종료</button>
-        </div>
-      )}
-
-      <div style={{ fontSize:11, color:"#6b7280", marginBottom:6 }}>💡 같은 숫자 3개 연속 → 제곱 (9 9 9 = 81)</div>
-
-      {/* Log */}
-      {log.length>0 && (
-        <div style={{ width:"100%", maxWidth:340, background:"rgba(0,0,0,0.3)", borderRadius:10, padding:"8px 12px", fontSize:12, color:"#d1d5db", lineHeight:1.8 }}>
-          {log.map((l,i)=><div key={i}>{l}</div>)}
-        </div>
-      )}
-
-      {/* Result / Gameover overlay */}
+    <GameScreen
+      difficulty={difficulty} round={round} turn={turn} hand={hand} selected={selected} phase={phase} log={log}
+      enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
+      fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
+      exprDisplay={exprDisplay} exprValue={exprValue}
+      onToggleCard={toggleCard}
+      onAttack={()=>endTurn(false)}
+      onSkip={()=>endTurn(true)}
+      onQuit={()=>{ if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }}
+    >
       {(phase==="result"||phase==="gameover") && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.82)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16, overflowY:"auto" }}>
-          <div className="overlay-pop" style={{ background: phase==="gameover"?"linear-gradient(135deg,#3b0000,#7f1d1d)":"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"26px 30px", textAlign:"center", border:`2px solid ${phase==="gameover"?"#ef4444":"#7c3aed"}`, maxWidth:320, width:"100%", margin:"auto" }}>
-
-            {/* 헤더 */}
-            {phase==="gameover"
-              ? <>
-                  <div style={{ display:"flex", justifyContent:"center", marginBottom:6 }}>
-                    <img src={`/player/player${Math.min(Math.max(0, round-1), 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain" }} />
-                  </div>
-                  <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
-                  <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
-                    {score?.turnLimitExceeded ? `R${round} 턴 초과 (${5 + round*5}턴)` : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
-                  </div>
-                </>
-              : <>
-                  <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain", marginBottom:4 }} />
-                  <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div>
-                </>
-            }
-
-            {/* 점수 요약 (result에만) */}
-            {phase==="result" && (
-              <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:10, padding:"10px 14px", fontSize:12, lineHeight:2, marginBottom:12, textAlign:"left" }}>
-                <div>⏱️ 클리어 턴: <strong style={{ color:"#fff" }}>{score?.turnCount}턴</strong></div>
-                <div>💥 최고 데미지: <strong style={{ color:"#fbbf24" }}>{score?.maxD}</strong></div>
-                <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#9ca3af" }}>📊 점수 계산</div>
-                <div>{score?.maxD} ÷ {score?.turnCount} = <strong style={{ color:"#fff" }}>{score?.base}</strong></div>
-                {score?.perfect && <div style={{ color:"#4ade80" }}>✨ 퍼펙트 클리어! × 2</div>}
-                {score?.allIn && <div style={{ color:"#fb923c" }}>🃏 올 인! × 2</div>}
-                {(score?.multiplier ?? 1) >= 4 && <div style={{ color:"#fbbf24", fontWeight:"bold" }}>⚡ 콤보! × 4</div>}
-                <div>🏆 라운드 점수: <strong style={{ color: (score?.multiplier??1)>=4?"#fbbf24":score?.allIn?"#fb923c":score?.perfect?"#4ade80":"#c084fc", fontSize:16 }}>{score?.finalScore?.toFixed(2)}</strong></div>
-                <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}>
-                  💰 최종 총점: <strong style={{ color:"#fbbf24", fontSize:16 }}>{score?.newTS?.toFixed(2)}점</strong>
-                </div>
-              </div>
-            )}
-
-            {/* 게임오버: 현재 순위 + 닉네임 등록 */}
-            {phase==="gameover" && !registrationDecided && (score?.newTS ?? 0) > 0 && (
-              <div style={{ marginBottom:12 }}>
-                {/* 현재 순위 */}
-                <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, padding:"12px", marginBottom:12 }}>
-                  <div style={{ color:"#9ca3af", fontSize:12, marginBottom:4 }}>총점 {score?.newTS?.toFixed(2)}점의 현재 순위</div>
-                  {preRankLoading
-                    ? <div style={{ color:"#6b7280", fontSize:14 }}>순위 확인 중...</div>
-                    : <div style={{ fontSize:28, fontWeight:"bold", color: preRank<=3?"#fbbf24":preRank<=10?"#c084fc":"#fff" }}>
-                        {DIFFICULTIES[difficulty].label} {preRank}위
-                      </div>
-                  }
-                </div>
-
-                {/* 닉네임 입력 */}
-                <div style={{ color:"#fbbf24", fontSize:13, fontWeight:"bold", marginBottom:8 }}>🏅 랭킹에 이름을 남기세요</div>
-                <input
-                  value={nickname}
-                  onChange={e => setNickname(e.target.value)}
-                  onKeyDown={e => e.key==="Enter" && submitScore(score?.newTS ?? totalScore)}
-                  placeholder="닉네임 입력 (최대 12자)"
-                  maxLength={12}
-                  style={{ width:"100%", padding:"8px 12px", borderRadius:10, border:"1px solid rgba(255,255,255,0.2)", background:"rgba(255,255,255,0.08)", color:"#fff", fontSize:14, outline:"none", marginBottom:8, boxSizing:"border-box" }}
-                />
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={() => submitScore(score?.newTS ?? totalScore)} disabled={!nickname.trim() || submitting} style={{
-                    flex:1, padding:"10px 0", borderRadius:20, border:"none",
-                    background: nickname.trim()&&!submitting ? "linear-gradient(135deg,#d97706,#f59e0b)" : "rgba(255,255,255,0.1)",
-                    color:"#fff", fontSize:13, fontWeight:"bold", cursor: nickname.trim()&&!submitting ? "pointer":"not-allowed",
-                  }}>
-                    {submitting ? "등록 중..." : "🏅 등록"}
-                  </button>
-                  <button onClick={() => setRegistrationSkipped(true)} style={{
-                    flex:1, padding:"10px 0", borderRadius:20, border:"1px solid rgba(255,255,255,0.2)",
-                    background:"rgba(255,255,255,0.07)", color:"#9ca3af", fontSize:13, fontWeight:"bold", cursor:"pointer",
-                  }}>
-                    등록 안하기
-                  </button>
-                </div>
-                {submitError && (
-                  <div style={{ marginTop:8, color:"#f87171", fontSize:12, padding:"8px", background:"rgba(239,68,68,0.1)", borderRadius:8 }}>{submitError}</div>
-                )}
-              </div>
-            )}
-
-            {/* 게임오버: 등록 완료 후 순위 표시 */}
-            {phase==="gameover" && nicknameSubmitted && (
-              <div style={{ marginBottom:16 }}>
-                {finalRank
-                  ? <div style={{ padding:"12px", background:"rgba(0,0,0,0.3)", borderRadius:12 }}>
-                      <div style={{ color:"#9ca3af", fontSize:12, marginBottom:4 }}>내 최종 순위</div>
-                      <div style={{ fontSize:32, fontWeight:"bold", color: finalRank<=3?"#fbbf24":finalRank<=10?"#c084fc":"#fff" }}>{finalRank}위</div>
-                      <div style={{ color:"#6b7280", fontSize:12, marginTop:4 }}>{nickname} · {score?.newTS?.toFixed(2)}점</div>
-                    </div>
-                  : <div style={{ color:"#9ca3af", fontSize:13 }}>랭킹 등록 완료!</div>
-                }
-              </div>
-            )}
-
-            {/* 등록 안하기 선택 시 */}
-            {phase==="gameover" && registrationSkipped && (
-              <div style={{ marginBottom:16, color:"#6b7280", fontSize:13 }}>등록하지 않았습니다</div>
-            )}
-
-            {/* 다음 라운드 / 메인·재시작 버튼 */}
-            {phase==="result" && (
-              <>
-                <div style={{ fontSize:11, color:"#6b7280", marginBottom:12 }}>
-                  다음 기준: {DIFFICULTIES[difficulty].threshold(round+1)}점 · 적 HP: {Math.floor(50*Math.pow(1.5,round))}
-                </div>
-                <button onClick={nextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
-              </>
-            )}
-
-            {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (score?.newTS ?? 0) > 0 && (
-              <div style={{ marginBottom:10 }}>
-                <button onClick={shareResult} style={{ width:"100%", padding:"11px 0", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#c084fc)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer", boxShadow:"0 4px 15px rgba(168,85,247,0.45)" }}>📤 친구에게 자랑하기</button>
-                {shareMsg && <div className="result-pop" style={{ marginTop:8, fontSize:12, color:"#c4b5fd" }}>{shareMsg}</div>}
-              </div>
-            )}
-
-            {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (
-              <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-                <button onClick={()=>startGame(difficulty)} style={{ padding:"10px 18px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#dc2626,#ef4444)", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🔄 재도전</button>
-                <button onClick={goMain} style={{ padding:"10px 18px", borderRadius:20, border:"2px solid rgba(255,255,255,0.2)", background:"transparent", color:"#fff", fontSize:13, fontWeight:"bold", cursor:"pointer" }}>🏠 메인으로</button>
-              </div>
-            )}
-          </div>
-        </div>
+        <ResultOverlay
+          phase={phase} round={round} difficulty={difficulty} score={score} totalScore={totalScore}
+          preRank={preRank} preRankLoading={preRankLoading} finalRank={finalRank}
+          nickname={nickname} onNicknameChange={setNickname}
+          submitting={submitting} submitError={submitError}
+          nicknameSubmitted={nicknameSubmitted} registrationSkipped={registrationSkipped}
+          shareMsg={shareMsg}
+          onSubmit={submitScore}
+          onSkipRegistration={()=>setRegistrationSkipped(true)}
+          onShare={shareResult}
+          onNextRound={nextRound}
+          onRetry={()=>startGame(difficulty)}
+          onGoMain={goMain}
+        />
       )}
-    </div>
+    </GameScreen>
   );
 }
