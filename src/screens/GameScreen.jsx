@@ -2,6 +2,14 @@ import { useState } from "react";
 import { DIFFICULTIES, getEnemy, maxHandSize, turnLimit } from "../game/rules";
 import SoundButtons from "../components/SoundButtons";
 
+function StatBar({ pct, color }) {
+  return (
+    <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:10, overflow:"hidden", marginBottom:3 }}>
+      <div style={{ height:"100%", width:`${pct}%`, background:color, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
+    </div>
+  );
+}
+
 // 전투 화면. 결과/게임오버 창은 children으로 받아 화면 안에 띄움
 export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
@@ -18,6 +26,13 @@ export default function GameScreen({
   const hpColor = hpPct>50?"#4ade80":hpPct>25?"#facc15":"#f87171";
   const maxSize = maxHandSize(round);
 
+  // 내 캐릭터: 클리어한 라운드 수만큼 성장한 이미지, 남은 턴이 체력바 역할
+  const playerImg = Math.min(Math.max(0, round - 1), 10);
+  const limit = turnLimit(round);
+  const turnsLeft = Math.max(0, limit - turn + 1);
+  const turnPct = (turnsLeft / limit) * 100;
+  const turnColor = turnPct>50?"#60a5fa":turnPct>25?"#facc15":"#f87171";
+
   return (
     <div className={screenShake ? "screen-shake" : ""} style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
 
@@ -32,8 +47,8 @@ export default function GameScreen({
       )}
 
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-        <button onClick={onQuit} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
-        <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
+        <button onClick={onQuit} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"5px 10px", cursor:"pointer", fontSize:12, whiteSpace:"nowrap", flexShrink:0 }}>🏠 메인</button>
+        <div style={{ fontSize:"clamp(14px, 4.4vw, 18px)", fontWeight:"bold", color:"#c084fc", letterSpacing:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", minWidth:0, padding:"0 4px" }}>✨ 수학 카드 배틀 ✨</div>
         <SoundButtons style={{ width:64, flexShrink:0, justifyContent:"flex-end" }} />
       </div>
 
@@ -41,7 +56,6 @@ export default function GameScreen({
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
         <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
-        <span style={{ background:"#1e40af", borderRadius:20, padding:"3px 10px", fontSize:12 }}>⚡ 턴{turn}/{turnLimit(round)}</span>
         <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
       </div>
 
@@ -73,26 +87,50 @@ export default function GameScreen({
         </div>
       )}
 
-      {/* Enemy */}
-      <div style={{ position:"relative", background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 22px", marginBottom:10, textAlign:"center", width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
-        <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""} style={{ display:"inline-block" }}>
-          <img src={enemy.img} alt={enemy.name} style={{ width:140, height:140, objectFit:"contain", display:"block" }} />
-        </div>
-        {dmgPops.map(p => (
-          <div key={p.id} className="dmg-pop" style={{
-            position:"absolute", top:40, left:"50%", pointerEvents:"none", whiteSpace:"nowrap",
-            fontSize: 26 + Math.min(p.ratio, 1) * 34, fontWeight:900,
-            color: p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
-            textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
-          }}>
-            {p.ratio>=0.5 && "💥"}-{p.dmg}
+      {/* 대결: 내 캐릭터 VS 적 */}
+      <div style={{ display:"flex", alignItems:"flex-end", gap:4, background:"rgba(255,255,255,0.05)", borderRadius:14, padding:"12px 12px 10px", marginBottom:10, width:"100%", maxWidth:340, border:"1px solid rgba(255,255,255,0.1)" }}>
+        {/* 내 캐릭터 (클리어한 라운드만큼 성장) + 남은 턴 = 체력바 */}
+        <div style={{ flex:1, minWidth:0, textAlign:"center" }}>
+          <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+            <div key={`p-${round}-${hitId}`} className={enemyHp<=0 ? "player-win" : hitId>0 ? "player-lunge" : ""}>
+              <div className="bob">
+                <img src={`/player/player${playerImg}.png`} alt="나" style={{ height:104, maxWidth:"100%", objectFit:"contain", display:"block" }} />
+              </div>
+            </div>
           </div>
-        ))}
-        <div style={{ fontSize:14, fontWeight:"bold", marginBottom:6 }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
-        <div style={{ background:"rgba(0,0,0,0.3)", borderRadius:10, height:12, overflow:"hidden", marginBottom:4 }}>
-          <div style={{ height:"100%", width:`${hpPct}%`, background:hpColor, borderRadius:10, transition:"width 0.4s,background 0.4s" }} />
+          <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px" }}>나 <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
+          <StatBar pct={turnPct} color={turnColor} />
+          <div style={{ fontSize:11, color: turnsLeft<=3 ? "#f87171" : "#d1d5db", fontWeight: turnsLeft<=3 ? "bold" : "normal" }}>⚡ 남은 턴 {turnsLeft}/{limit}</div>
         </div>
-        <div style={{ fontSize:12, color:"#d1d5db" }}>HP: {enemyHp} / {enemyMaxHp}</div>
+
+        <div style={{ alignSelf:"center", paddingBottom:40, textAlign:"center", flexShrink:0, width:30 }}>
+          <div style={{ fontSize:18 }}>⚔️</div>
+          <div style={{ fontSize:11, fontWeight:900, color:"#fbbf24", letterSpacing:1 }}>VS</div>
+        </div>
+
+        {/* 적 */}
+        <div style={{ flex:1, minWidth:0, textAlign:"center", position:"relative" }}>
+          <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+            <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""}>
+              <div className={enemyHp>0 ? "bob" : ""} style={{ animationDelay:"-1.2s" }}>
+                <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block" }} />
+              </div>
+            </div>
+          </div>
+          {dmgPops.map(p => (
+            <div key={p.id} className="dmg-pop" style={{
+              position:"absolute", top:24, left:"50%", pointerEvents:"none", whiteSpace:"nowrap", zIndex:2,
+              fontSize: 24 + Math.min(p.ratio, 1) * 26, fontWeight:900,
+              color: p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
+              textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
+            }}>
+              {p.ratio>=0.5 && "💥"}-{p.dmg}
+            </div>
+          ))}
+          <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
+          <StatBar pct={hpPct} color={hpColor} />
+          <div style={{ fontSize:11, color:"#d1d5db" }}>HP {enemyHp}/{enemyMaxHp}</div>
+        </div>
       </div>
 
       {/* Expression */}

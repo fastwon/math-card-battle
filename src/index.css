@@ -71,6 +71,20 @@ body {
 .overlay-pop  { animation: overlayPop 0.35s cubic-bezier(.2,1.3,.4,1); }
 .ready-pulse  { animation: readyPulse 1.2s ease-in-out infinite; }
 
+/* ── 내 캐릭터 ── */
+@keyframes playerLunge {
+  0%   { transform: none; }
+  30%  { transform: translateX(28px) scale(1.08); }
+  100% { transform: none; }
+}
+@keyframes playerWin {
+  0%, 50%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-20px); }
+  72% { transform: translateY(-10px); }
+}
+.player-lunge { animation: playerLunge 0.32s ease-out; }
+.player-win   { animation: playerLunge 0.32s ease-out, playerWin 0.9s ease-out 0.3s; }
+
 /* ── 메인 화면 ── */
 @keyframes floatUp {
   from { transform: translateY(0) rotate(0deg); }
@@ -98,7 +112,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .dmg-pop, .enemy-hit, .enemy-dying, .screen-shake, .hit-flash,
   .card-in, .kill-banner, .overlay-pop, .ready-pulse,
-  .bg-card, .title-shine, .bob, .result-pop {
+  .bg-card, .title-shine, .bob, .result-pop, .player-lunge, .player-win {
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
