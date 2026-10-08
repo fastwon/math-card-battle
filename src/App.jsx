@@ -85,6 +85,27 @@ function getEnemy(round) {
   return ENEMIES[(round - 1) % ENEMIES.length];
 }
 
+const SITE_URL = "https://math-card-battle.vercel.app";
+
+// 텍스트 복사 (clipboard API가 막힌 환경 대비 fallback 포함)
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { /* 무시 */ }
+    ta.remove();
+    return ok;
+  }
+}
+
 const rankColor = i => i===0?"#fbbf24":i===1?"#d1d5db":i===2?"#cd7f32":"#9ca3af";
 
 function RankRow({ rank, entry }) {
@@ -287,6 +308,7 @@ export default function App() {
   const [totalScore, setTotalScore] = useState(0);
   const [roundScores, setRoundScores] = useState([]);
   const [finalRank, setFinalRank] = useState(null);
+  const [shareMsg, setShareMsg] = useState(null);
 
   // 닉네임
   const [nickname, setNickname] = useState("");
@@ -426,6 +448,28 @@ export default function App() {
     }
   }
 
+  async function shareResult() {
+    const d = DIFFICULTIES[difficulty];
+    const total = (score?.newTS ?? totalScore).toFixed(2);
+    const rankText = nicknameSubmitted && finalRank ? ` (${d.label} ${finalRank}위!)` : "";
+    const body = `🃏 수학 카드 배틀 ${d.emoji} ${d.label}\nR${round}까지 도달! 총점 ${total}점${rankText}\n나를 이길 수 있어?`;
+    play("click");
+
+    // 휴대폰: 기기 공유 창(카톡·문자 등) / PC: 클립보드 복사
+    const isTouch = window.matchMedia?.("(pointer: coarse)").matches;
+    if (isTouch && navigator.share) {
+      try {
+        await navigator.share({ title: "수학 카드 배틀", text: body, url: SITE_URL });
+        return;
+      } catch (e) {
+        if (e?.name === "AbortError") return; // 사용자가 공유 창을 닫음
+      }
+    }
+    const ok = await copyText(`${body}\n👉 ${SITE_URL}`);
+    setShareMsg(ok ? "📋 복사했어요! 친구에게 붙여넣기 하세요" : "복사에 실패했어요");
+    fxTimeout(() => setShareMsg(null), 2500);
+  }
+
   function startGame(diff) {
     clearFx();
     play("click");
@@ -435,7 +479,7 @@ export default function App() {
     setLastDmg(null); setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
     setNickname(""); setNicknameSubmitted(false); setRegistrationSkipped(false);
-    setSubmitting(false); setPreRank(null);
+    setSubmitting(false); setPreRank(null); setShareMsg(null);
     setScreen("game");
   }
 
@@ -933,6 +977,13 @@ export default function App() {
                 </div>
                 <button onClick={nextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
               </>
+            )}
+
+            {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (score?.newTS ?? 0) > 0 && (
+              <div style={{ marginBottom:10 }}>
+                <button onClick={shareResult} style={{ width:"100%", padding:"11px 0", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#c084fc)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer", boxShadow:"0 4px 15px rgba(168,85,247,0.45)" }}>📤 친구에게 자랑하기</button>
+                {shareMsg && <div className="result-pop" style={{ marginTop:8, fontSize:12, color:"#c4b5fd" }}>{shareMsg}</div>}
+              </div>
             )}
 
             {phase==="gameover" && (registrationDecided || (score?.newTS ?? 0) <= 0) && (
