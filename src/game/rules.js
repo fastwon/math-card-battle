@@ -3,8 +3,8 @@
 export const OPS = ["+", "-", "×", "÷"];
 
 export const DIFFICULTIES = {
-  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r },
-  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 2 },
+  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 2 },
+  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 3 },
   hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r },
 };
 
@@ -118,7 +118,7 @@ export function enemyMaxHpFor(round) {
 }
 // 라운드별 최대 턴 수 (초과 시 게임오버). extra = 시간 연장 패시브 레벨
 export function turnLimit(round, extra = 0) {
-  return 5 + round * 4 + extra;
+  return 6 + round * 3 + extra;
 }
 // 라운드 기준 점수 (이하면 게임오버). relaxLv = 여유 패시브 레벨 (레벨당 −5%)
 export function thresholdFor(difficulty, round, relaxLv = 0) {
