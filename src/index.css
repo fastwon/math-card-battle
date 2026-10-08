@@ -68,6 +68,7 @@ body {
 .hit-flash    { animation: flash 0.35s ease-out forwards; }
 .card-in      { animation: cardIn 0.35s cubic-bezier(.2,1.4,.4,1) backwards; }
 .kill-banner  { animation: bannerPop 1.2s ease-out forwards; }
+.banner-long  { animation: bannerPop 2s ease-out forwards; }
 .overlay-pop  { animation: overlayPop 0.35s cubic-bezier(.2,1.3,.4,1); }
 .ready-pulse  { animation: readyPulse 1.2s ease-in-out infinite; }
 
@@ -111,7 +112,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .dmg-pop, .enemy-hit, .enemy-dying, .screen-shake, .hit-flash,
-  .card-in, .kill-banner, .overlay-pop, .ready-pulse,
+  .card-in, .kill-banner, .banner-long, .overlay-pop, .ready-pulse,
   .bg-card, .title-shine, .bob, .result-pop, .player-lunge, .player-win {
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;

@@ -1,4 +1,31 @@
 import { DIFFICULTIES, enemyMaxHpFor, turnLimit } from "../game/rules";
+import { PASSIVES, ITEMS } from "../game/rewards";
+
+// 보상 선택지 카드 1장
+function RewardCard({ opt, passives, items, onPick }) {
+  const isPassive = opt.kind === "passive";
+  const def = isPassive ? PASSIVES[opt.key] : ITEMS[opt.key];
+  const badge = isPassive
+    ? (opt.from === 0 ? { text:"NEW!", color:"#4ade80" } : { text:`Lv${opt.from} → Lv${opt.to}`, color:"#c084fc" })
+    : { text:`+${opt.gain}개 (보유 ${items[opt.key]})`, color:"#fbbf24" };
+  const desc = isPassive ? def.levels[opt.to - 1] : def.desc;
+  return (
+    <button onClick={() => onPick(opt)} style={{
+      display:"flex", alignItems:"center", gap:10, width:"100%", textAlign:"left", padding:"9px 12px", marginBottom:7,
+      borderRadius:12, border:`1.5px solid ${badge.color}88`, background:"rgba(0,0,0,0.32)", color:"#fff", cursor:"pointer",
+    }}>
+      <div style={{ fontSize:24, flexShrink:0 }}>{def.icon}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, fontWeight:"bold", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+          {def.name}
+          <span style={{ fontSize:10, color:badge.color, border:`1px solid ${badge.color}`, borderRadius:8, padding:"0 5px" }}>{badge.text}</span>
+          {!isPassive && <span style={{ fontSize:10, color:"#9ca3af" }}>아이템</span>}
+        </div>
+        <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>{desc}</div>
+      </div>
+    </button>
+  );
+}
 
 // 라운드 클리어(phase="result") / 게임오버(phase="gameover") 창
 export default function ResultOverlay({
@@ -6,6 +33,7 @@ export default function ResultOverlay({
   preRank, preRankLoading, finalRank,
   nickname, onNicknameChange, submitting, submitError, nicknameSubmitted, registrationSkipped,
   shareMsg, onSubmit, onSkipRegistration, onShare, onNextRound, onRetry, onGoMain,
+  rewardOptions, passives, items, onPickReward, nextThresh,
 }) {
   const registrationDecided = nicknameSubmitted || registrationSkipped;
   const total = score?.newTS ?? totalScore;
@@ -23,12 +51,12 @@ export default function ResultOverlay({
               <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>{score?.quit ? "게임 포기" : "게임 오버"}</div>
               <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
                 {score?.quit ? `R${round}에서 포기 · R${round-1}까지 클리어`
-                  : score?.turnLimitExceeded ? `R${round} 턴 초과 (${turnLimit(round)}턴)`
+                  : score?.turnLimitExceeded ? `R${round} 턴 초과 (${score?.limit ?? turnLimit(round)}턴)`
                   : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
               </div>
             </>
           : <>
-              <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain", marginBottom:4 }} />
+              <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ height: rewardOptions.length ? "min(110px, 14vh)" : "min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain", marginBottom:4 }} />
               <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#c084fc" }}>라운드 {round} 클리어!</div>
             </>
         }
@@ -118,9 +146,15 @@ export default function ResultOverlay({
         {phase==="result" && (
           <>
             <div style={{ fontSize:11, color:"#6b7280", marginBottom:12 }}>
-              다음 기준: {DIFFICULTIES[difficulty].threshold(round+1)}점 · 적 HP: {enemyMaxHpFor(round+1)}
+              다음 기준: {nextThresh}점 · 적 HP: {enemyMaxHpFor(round+1)}
             </div>
-            <button onClick={onNextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
+            {rewardOptions.length > 0
+              ? <>
+                  <div style={{ fontSize:14, fontWeight:"bold", color:"#fbbf24", marginBottom:8 }}>🎁 보상을 하나 고르세요</div>
+                  {rewardOptions.map(opt => <RewardCard key={opt.kind + opt.key} opt={opt} passives={passives} items={items} onPick={onPickReward} />)}
+                </>
+              : <button onClick={onNextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>
+            }
           </>
         )}
 

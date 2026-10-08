@@ -96,6 +96,15 @@ const SOUNDS = {
     arpeggio([1047, 1568, 2093], { delay: 0.7, step: 0.0, dur: 0.6, type: "triangle", vol: 0.25 });
   },
 
+  // 보상·아이템
+  levelUp: () => arpeggio([523, 784, 1047, 1568], { step: 0.06, dur: 0.2, type: "square", vol: 0.18 }),
+  item:    () => arpeggio([1319, 1568, 2093], { step: 0.04, dur: 0.12, type: "triangle", vol: 0.2 }),
+  synth: () => {
+    noise({ dur: 0.5, vol: 0.15, filter: 8000, to: 2000 });
+    arpeggio([659, 831, 988, 1319, 1661, 1976], { step: 0.07, dur: 0.3, type: "triangle", vol: 0.25 });
+  },
+  revive: () => arpeggio([392, 523, 659, 784, 1047], { step: 0.09, dur: 0.35, type: "triangle", vol: 0.3 }),
+
   roundClear: () => arpeggio([523, 659, 784, 1047], { step: 0.1, dur: 0.3, type: "triangle", vol: 0.3 }),
   gameOver:   () => arpeggio([392, 330, 262, 196], { step: 0.22, dur: 0.4, type: "sawtooth", vol: 0.18 }),
 };

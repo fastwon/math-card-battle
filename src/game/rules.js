@@ -15,14 +15,36 @@ let _cardId = 0;
 export function makeCard(type, value) {
   return { type, value, id: ++_cardId };
 }
-export function genCard(hand = []) {
+// 패시브(mods)에 따른 카드 생성 보정. mods가 비어 있으면 기존과 완전히 같은 방식으로 뽑음
+// mods: { bigNum, mulMaster, opSense, luckyStart, timeExt, relax } 각 값은 패시브 레벨(0~5)
+
+// 큰 수의 축복: 레벨별 숫자 가중치 (적히지 않은 숫자는 1)
+const BIGNUM_WEIGHTS = [null, { 1:0.5 }, { 1:0 }, { 1:0, 2:0.5 }, { 1:0, 2:0 }, { 1:0, 2:0, 3:0.5 }];
+function randNum(bigNumLv) {
+  if (!bigNumLv) return randInt(1, 9);
+  const w = BIGNUM_WEIGHTS[bigNumLv];
+  const weights = [1,2,3,4,5,6,7,8,9].map(n => w[n] ?? 1);
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let n = 1; n <= 9; n++) { r -= weights[n-1]; if (r < 0) return n; }
+  return 9;
+}
+
+export function genCard(hand = [], mods = {}) {
   const opCount = hand.filter(c => c.type === "op").length;
-  const isOp = opCount >= 4 ? false : Math.random() < 0.3;
+  const opChance = 0.3 + 0.02 * (mods.opSense || 0);           // 연산 감각
+  const isOp = opCount >= 4 ? false : Math.random() < opChance;
   if (isOp) {
     const availableOps = OPS.filter(op => hand.filter(c => c.type === "op" && c.value === op).length < 3);
-    if (availableOps.length > 0) return makeCard("op", availableOps[Math.floor(Math.random() * availableOps.length)]);
+    if (availableOps.length > 0) {
+      if (mods.mulMaster && availableOps.includes("×")) {        // 곱셈 숙련
+        const others = availableOps.filter(op => op !== "×");
+        if (!others.length || Math.random() < 0.25 + 0.05 * mods.mulMaster) return makeCard("op", "×");
+        return makeCard("op", others[Math.floor(Math.random() * others.length)]);
+      }
+      return makeCard("op", availableOps[Math.floor(Math.random() * availableOps.length)]);
+    }
   }
-  return makeCard("num", randInt(1, 9));
+  return makeCard("num", randNum(mods.bigNum));
 }
 export function maxHandSize(round) {
   if (round <= 2) return 7;
@@ -30,19 +52,38 @@ export function maxHandSize(round) {
   if (round <= 6) return 9;
   return 10;
 }
-export function genHand(round) {
-  const size = Math.min(5, maxHandSize(round));
+// size장 손패 생성 (숫자 2장 이상 + 연산 1장 이상이 되도록 재시도). 리롤 아이템도 사용
+export function drawHand(size, mods = {}) {
   let hand = [], attempts = 0;
   while (attempts++ < 200) {
     hand = [];
-    for (let i = 0; i < size; i++) hand.push(genCard(hand));
+    for (let i = 0; i < size; i++) hand.push(genCard(hand, mods));
     if (hand.filter(c=>c.type==="num").length >= 2 && hand.filter(c=>c.type==="op").length >= 1) break;
   }
   return hand;
 }
-export function addCard(h, r) {
+
+// 행운의 시작: 시작 손패의 숫자 n장을 min~9로 바꾸고, mul이면 × 보장 (장수는 그대로)
+const LUCKY_START = [null,
+  { n:1, min:7 }, { n:2, min:7 }, { n:2, min:7, mul:true }, { n:3, min:7, mul:true }, { n:3, min:8, mul:true }];
+function applyLuckyStart(hand, lv) {
+  if (!lv) return hand;
+  const cfg = LUCKY_START[lv];
+  let left = cfg.n;
+  hand = hand.map(c => (c.type === "num" && left-- > 0) ? { ...c, value: randInt(cfg.min, 9) } : c);
+  if (cfg.mul && !hand.some(c => c.type === "op" && c.value === "×")) {
+    const i = hand.findIndex(c => c.type === "op");
+    if (i >= 0) hand[i] = { ...hand[i], value: "×" };
+  }
+  return hand;
+}
+
+export function genHand(round, mods = {}) {
+  return applyLuckyStart(drawHand(Math.min(5, maxHandSize(round)), mods), mods.luckyStart);
+}
+export function addCard(h, r, mods = {}) {
   if (h.length >= maxHandSize(r)) return h;
-  return [...h, genCard(h)];
+  return [...h, genCard(h, mods)];
 }
 
 export function parseExpression(selected) {
@@ -75,9 +116,14 @@ export function parseExpression(selected) {
 export function enemyMaxHpFor(round) {
   return Math.floor(50 * Math.pow(1.5, round - 1));
 }
-// 라운드별 최대 턴 수 (초과 시 게임오버)
-export function turnLimit(round) {
-  return 5 + round * 4;
+// 라운드별 최대 턴 수 (초과 시 게임오버). extra = 시간 연장 패시브 레벨
+export function turnLimit(round, extra = 0) {
+  return 5 + round * 4 + extra;
+}
+// 라운드 기준 점수 (이하면 게임오버). relaxLv = 여유 패시브 레벨 (레벨당 −5%)
+export function thresholdFor(difficulty, round, relaxLv = 0) {
+  const t = DIFFICULTIES[difficulty].threshold(round);
+  return relaxLv ? Math.round(t * (1 - 0.05 * relaxLv) * 100) / 100 : t;
 }
 
 export const ENEMIES = [

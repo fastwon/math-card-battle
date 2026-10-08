@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { DIFFICULTIES, getEnemy, maxHandSize, turnLimit } from "../game/rules";
+import { DIFFICULTIES, getEnemy, maxHandSize } from "../game/rules";
 import SoundButtons from "../components/SoundButtons";
+import { PassiveBar, ItemBar, ItemPanel } from "../components/Loadout";
 
 function StatBar({ pct, color }) {
   return (
@@ -15,7 +16,8 @@ export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
-  onToggleCard, onAttack, onSkip, onQuit, children,
+  limit, passives, items, itemMode,
+  onToggleCard, onAttack, onSkip, onQuit, onUseItem, onPenValue, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
   const { hitId, dmgPops, screenShake, flashId, killBanner } = fx;
@@ -28,7 +30,6 @@ export default function GameScreen({
 
   // 내 캐릭터: 클리어한 라운드 수만큼 성장한 이미지, 남은 턴이 체력바 역할
   const playerImg = Math.min(Math.max(0, round - 1), 10);
-  const limit = turnLimit(round);
   const turnsLeft = Math.max(0, limit - turn + 1);
   const turnPct = (turnsLeft / limit) * 100;
   const turnColor = turnPct>50?"#60a5fa":turnPct>25?"#facc15":"#f87171";
@@ -37,12 +38,13 @@ export default function GameScreen({
     <div className={screenShake ? "screen-shake" : ""} style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
 
       {/* 큰 타격 시 화면 번쩍임 */}
-      {flashId > 0 && <div key={flashId} className="hit-flash" style={{ position:"fixed", inset:0, background:"#fff", pointerEvents:"none", zIndex:90 }} />}
+      {flashId > 0 && <div key={flashId} className="hit-flash" style={{ position:"fixed", inset:0, background:"#fff", opacity:0, pointerEvents:"none", zIndex:90 }} />}
 
       {/* 처치 배너 */}
       {killBanner && (
-        <div className="kill-banner" style={{ position:"fixed", top:"40%", left:"50%", zIndex:95, pointerEvents:"none", whiteSpace:"nowrap", fontSize:"clamp(36px, 12vw, 64px)", fontWeight:900, color:killBanner.color, letterSpacing:2, textShadow:`0 0 24px ${killBanner.color}, 0 4px 0 rgba(0,0,0,0.6)` }}>
+        <div key={killBanner.text} className={killBanner.long ? "banner-long" : "kill-banner"} style={{ position:"fixed", top:"40%", left:"50%", transform:"translate(-50%, -50%)", zIndex:95, pointerEvents:"none", whiteSpace:"nowrap", textAlign:"center", fontSize: killBanner.sub ? "clamp(30px, 10vw, 52px)" : "clamp(36px, 12vw, 64px)", fontWeight:900, color:killBanner.color, letterSpacing:2, textShadow:`0 0 24px ${killBanner.color}, 0 4px 0 rgba(0,0,0,0.6)` }}>
           {killBanner.text}
+          {killBanner.sub && <div style={{ fontSize:"clamp(13px, 4vw, 17px)", letterSpacing:0, color:"#fff", marginTop:6, textShadow:"0 2px 6px rgba(0,0,0,0.9)" }}>{killBanner.sub}</div>}
         </div>
       )}
 
@@ -58,6 +60,9 @@ export default function GameScreen({
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
         <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
       </div>
+
+      {/* 보유 패시브 (보상을 하나라도 얻은 뒤부터 표시) */}
+      {(Object.values(passives).some(v => v > 0) || Object.values(items).some(v => v > 0)) && <PassiveBar passives={passives} />}
 
       {/* 총점 (hover/click 시 라운드별 상세) */}
       {roundScores.length > 0 && (
@@ -149,6 +154,7 @@ export default function GameScreen({
         {hand.map((card, i)=>{
           const isSel = !!selected.find(c=>c.id===card.id);
           const isOp = card.type==="op";
+          const isItemTarget = itemMode && (itemMode.cardId === card.id || itemMode.targetId === card.id);
           return (
             <div key={card.id} onClick={()=>onToggleCard(card)} className="card-in" style={{
               animationDelay: turn===1 ? `${i*60}ms` : "0ms",
@@ -156,9 +162,9 @@ export default function GameScreen({
               alignItems:"center", justifyContent:"center", cursor:"pointer", fontWeight:"bold",
               fontSize: isOp?20:24,
               background: isSel ? (isOp?"linear-gradient(135deg,#7c3aed,#a855f7)":"linear-gradient(135deg,#1d4ed8,#3b82f6)") : (isOp?"linear-gradient(135deg,#4c1d95,#6d28d9)":"linear-gradient(135deg,#1e3a8a,#1d4ed8)"),
-              border: isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
-              boxShadow: isSel?"0 0 12px rgba(255,255,255,0.4)":"0 2px 6px rgba(0,0,0,0.4)",
-              transform: isSel?"translateY(-8px) scale(1.05)":"none",
+              border: isItemTarget ? "2px solid #f472b6" : itemMode ? "2px dashed #fbbf24" : isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
+              boxShadow: isItemTarget ? "0 0 14px rgba(244,114,182,0.8)" : isSel?"0 0 12px rgba(255,255,255,0.4)":"0 2px 6px rgba(0,0,0,0.4)",
+              transform: isSel||isItemTarget?"translateY(-8px) scale(1.05)":"none",
               transition:"all 0.2s", userSelect:"none", color:"#fff",
             }}>
               <div>{card.value}</div>
@@ -168,8 +174,11 @@ export default function GameScreen({
         })}
       </div>
 
+      {/* 아이템 사용 중: 안내 + 마법 펜 값 선택 */}
+      {phase==="play" && itemMode && <ItemPanel itemMode={itemMode} onPenValue={onPenValue} onCancel={onCancelItem} />}
+
       {/* Buttons */}
-      {phase==="play" && (
+      {phase==="play" && !itemMode && (
         <div style={{ display:"flex", gap:10, marginBottom:8 }}>
           <button onClick={onAttack} disabled={!exprValue||exprValue<=0} className={exprValue&&exprValue>0 ? "ready-pulse" : ""} style={{
             padding:"10px 22px", fontSize:14, fontWeight:"bold", borderRadius:30, border:"none",
@@ -184,6 +193,9 @@ export default function GameScreen({
           }}>💤 턴 종료</button>
         </div>
       )}
+
+      {/* 보유 아이템 */}
+      <ItemBar items={items} itemMode={itemMode} onUse={onUseItem} disabled={phase!=="play"} />
 
       <div style={{ fontSize:11, color:"#6b7280", marginBottom:6 }}>💡 같은 숫자 3개 연속 → 제곱 (9 9 9 = 81)</div>
 
