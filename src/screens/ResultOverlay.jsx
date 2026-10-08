@@ -20,9 +20,11 @@ export default function ResultOverlay({
               <div style={{ display:"flex", justifyContent:"center", marginBottom:6 }}>
                 <img src={`/player/player${Math.min(Math.max(0, round-1), 10)}.png`} alt="player" style={{ height:"min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain" }} />
               </div>
-              <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>게임 오버</div>
+              <div style={{ fontSize:19, fontWeight:"bold", marginBottom:4, color:"#f87171" }}>{score?.quit ? "게임 포기" : "게임 오버"}</div>
               <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
-                {score?.turnLimitExceeded ? `R${round} 턴 초과 (${turnLimit(round)}턴)` : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
+                {score?.quit ? `R${round}에서 포기 · R${round-1}까지 클리어`
+                  : score?.turnLimitExceeded ? `R${round} 턴 초과 (${turnLimit(round)}턴)`
+                  : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
               </div>
             </>
           : <>

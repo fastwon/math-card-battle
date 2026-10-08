@@ -208,8 +208,9 @@ export default function App() {
     setSelected(prev => isSel ? prev.filter(c=>c.id!==card.id) : [...prev, card]);
   }
 
-  function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, isTurnLimit = false) {
-    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: isTurnLimit });
+  // reason: "turnLimit"(턴 초과) | "quit"(도중 포기)
+  function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, reason) {
+    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: reason === "turnLimit", quit: reason === "quit" });
     setTotalScore(newTS);
     setPhase("gameover");
     loadPreRank(newTS, currentDiff, currentRound);
@@ -274,7 +275,7 @@ export default function App() {
     if (nextTurn > turnLimit(round)) {
       const thresh = DIFFICULTIES[difficulty].threshold(round);
       play("gameOver");
-      triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, true);
+      triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, "turnLimit");
       return;
     }
     // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
@@ -285,6 +286,20 @@ export default function App() {
     }
     if (newHand.length < maxHandSize(round)) fxTimeout(() => play("draw"), skip ? 0 : 250);
     setTurn(nextTurn);
+  }
+
+  // 게임 도중 포기: 점수가 있으면 게임오버와 같은 방식으로 랭킹 등록 여부를 물음
+  function quitGame() {
+    if (phase !== "play") return; // 처치 연출 중에는 무시
+    if (totalScore <= 0) {
+      if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain();
+      return;
+    }
+    if (!window.confirm(`게임을 포기하시겠습니까?\n지금까지의 총점 ${totalScore.toFixed(2)}점으로 랭킹에 등록할 수 있습니다.`)) return;
+    clearFx();
+    setSelected([]);
+    play("gameOver");
+    triggerGameOver(totalScore, difficulty, round, turn, maxDmg, DIFFICULTIES[difficulty].threshold(round), "quit");
   }
 
   function nextRound() {
@@ -327,7 +342,7 @@ export default function App() {
       onToggleCard={toggleCard}
       onAttack={()=>endTurn(false)}
       onSkip={()=>endTurn(true)}
-      onQuit={()=>{ if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }}
+      onQuit={quitGame}
     >
       {(phase==="result"||phase==="gameover") && (
         <ResultOverlay
