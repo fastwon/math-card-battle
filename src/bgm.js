@@ -2,7 +2,7 @@
 import { getAudioContext } from "./sfx";
 
 const MUTE_KEY = "mcb_bgm_muted";
-const BUS_VOLUME = 0.16;
+const BUS_VOLUME = 0.096; // 전체 배경음악 볼륨
 
 let muted = false;
 try { muted = localStorage.getItem(MUTE_KEY) === "1"; } catch { /* 저장소 사용 불가 시 기본값 */ }

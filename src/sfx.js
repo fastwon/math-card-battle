@@ -14,7 +14,7 @@ function ac() {
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = 0.35;
+    master.gain.value = 0.21; // 전체 효과음 볼륨
     master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") ctx.resume();
