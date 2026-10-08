@@ -100,6 +100,9 @@ const SOUNDS = {
   gameOver:   () => arpeggio([392, 330, 262, 196], { step: 0.22, dur: 0.4, type: "sawtooth", vol: 0.18 }),
 };
 
+// BGM(bgm.js)과 같은 AudioContext를 공유
+export function getAudioContext() { return ac(); }
+
 export function play(name, ...args) {
   if (muted) return;
   try { SOUNDS[name]?.(...args); } catch { /* 오디오 실패는 게임 진행에 영향 없음 */ }

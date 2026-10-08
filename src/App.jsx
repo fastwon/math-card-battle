@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { play, isMuted, setMuted } from "./sfx";
+import { playBgm, isBgmMuted, setBgmMuted } from "./bgm";
 
 const OPS = ["+", "-", "×", "÷"];
 
@@ -97,17 +98,25 @@ function RankRow({ rank, entry }) {
   );
 }
 
-function MuteButton({ style }) {
-  const [muted, setM] = useState(isMuted());
-  function toggle() {
-    setMuted(!muted);
-    setM(!muted);
-    if (muted) play("click");
+// 🎵 배경음악 / 🔊 효과음 각각 켜고 끄기
+function SoundButtons({ style }) {
+  const [sfxMuted, setSfxM] = useState(isMuted());
+  const [bgmMuted, setBgmM] = useState(isBgmMuted());
+  const btn = { width:30, height:28, borderRadius:10, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.07)", cursor:"pointer", fontSize:13, lineHeight:1, padding:0 };
+  function toggleBgm() {
+    setBgmMuted(!bgmMuted);
+    setBgmM(!bgmMuted);
+  }
+  function toggleSfx() {
+    setMuted(!sfxMuted);
+    setSfxM(!sfxMuted);
+    if (sfxMuted) play("click");
   }
   return (
-    <button onClick={toggle} title={muted ? "소리 켜기" : "소리 끄기"} style={{ width:32, height:28, borderRadius:10, border:"1px solid rgba(255,255,255,0.15)", background:"rgba(255,255,255,0.07)", cursor:"pointer", fontSize:14, lineHeight:1, ...style }}>
-      {muted ? "🔇" : "🔊"}
-    </button>
+    <div style={{ display:"flex", gap:4, ...style }}>
+      <button onClick={toggleBgm} title={bgmMuted ? "배경음악 켜기" : "배경음악 끄기"} style={{ ...btn, opacity: bgmMuted ? 0.4 : 1, textDecoration: bgmMuted ? "line-through" : "none" }}>🎵</button>
+      <button onClick={toggleSfx} title={sfxMuted ? "효과음 켜기" : "효과음 끄기"} style={btn}>{sfxMuted ? "🔇" : "🔊"}</button>
+    </div>
   );
 }
 
@@ -288,6 +297,14 @@ export default function App() {
   const registrationDecided = nicknameSubmitted || registrationSkipped;
 
   useEffect(() => { fetchTop10("easy"); }, []);
+
+  // 배경음악: 메인·랭킹 = 로비, R1~6 = 전투, R7~ = 보스. 라운드마다 템포 상승, 게임오버 시 정지
+  useEffect(() => {
+    if (screen !== "game") playBgm("lobby");
+    else if (phase === "gameover") playBgm(null);
+    else if (round <= 6) playBgm("battle", 132 + (round - 1) * 3);
+    else playBgm("boss", Math.min(150 + (round - 7) * 2, 166));
+  }, [screen, phase, round]);
 
   async function fetchTop10(tab) {
     const { data, error } = await supabase
@@ -575,7 +592,7 @@ export default function App() {
         {/* 상단 바: 규칙 / 음소거 */}
         <div style={{ width:"100%", maxWidth:340, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <button onClick={()=>setShowRules(true)} style={{ height:28, padding:"0 12px", borderRadius:10, border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:12, fontWeight:"bold", cursor:"pointer" }}>📖 게임 규칙</button>
-          <MuteButton />
+          <SoundButtons />
         </div>
 
         {/* 타이틀 */}
@@ -683,7 +700,7 @@ export default function App() {
       <div style={{ width:"100%", maxWidth:380, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
         <button onClick={() => { if (window.confirm("게임을 종료하고 메인 메뉴로 돌아가겠습니까?")) goMain(); }} style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:10, color:"#9ca3af", padding:"4px 12px", cursor:"pointer", fontSize:12 }}>🏠 메인으로</button>
         <div style={{ fontSize:18, fontWeight:"bold", color:"#c084fc", letterSpacing:2 }}>✨ 수학 카드 배틀 ✨</div>
-        <div style={{ width:60, display:"flex", justifyContent:"flex-end" }}><MuteButton /></div>
+        <SoundButtons style={{ width:64, flexShrink:0, justifyContent:"flex-end" }} />
       </div>
 
       {/* Status bar */}
