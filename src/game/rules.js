@@ -77,7 +77,7 @@ export function enemyMaxHpFor(round) {
 }
 // 라운드별 최대 턴 수 (초과 시 게임오버)
 export function turnLimit(round) {
-  return 5 + round * 5;
+  return 5 + round * 4;
 }
 
 export const ENEMIES = [
