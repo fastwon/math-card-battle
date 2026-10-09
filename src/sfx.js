@@ -105,6 +105,29 @@ const SOUNDS = {
   },
   revive: () => arpeggio([392, 523, 659, 784, 1047], { step: 0.09, dur: 0.35, type: "triangle", vol: 0.3 }),
 
+  // 적의 공격
+  enemyAttack: () => {
+    noise({ dur: 0.25, vol: 0.35, filter: 1200, to: 4000 });
+    tone({ freq: 120, to: 60, dur: 0.25, type: "sawtooth", vol: 0.3, delay: 0.12 });
+  },
+  cardBreak: () => {
+    noise({ dur: 0.35, vol: 0.45, filter: 9000, to: 2500 });
+    arpeggio([1760, 1319, 988], { step: 0.04, dur: 0.12, type: "square", vol: 0.12 });
+  },
+  seal: () => {
+    tone({ freq: 220, to: 110, dur: 0.5, type: "triangle", vol: 0.4 });
+    tone({ freq: 330, to: 165, dur: 0.5, type: "sine", vol: 0.2, delay: 0.05 });
+  },
+  bossAppear: () => {
+    tone({ freq: 55, to: 45, dur: 1.4, type: "sawtooth", vol: 0.35 });
+    tone({ freq: 82, to: 70, dur: 1.4, type: "triangle", vol: 0.3 });
+    noise({ dur: 1.2, vol: 0.2, filter: 400, to: 100 });
+  },
+  rage: () => {
+    tone({ freq: 300, to: 70, dur: 0.7, type: "sawtooth", vol: 0.35 });
+    noise({ dur: 0.6, vol: 0.3, filter: 2000, to: 200 });
+  },
+
   roundClear: () => arpeggio([523, 659, 784, 1047], { step: 0.1, dur: 0.3, type: "triangle", vol: 0.3 }),
   gameOver:   () => arpeggio([392, 330, 262, 196], { step: 0.22, dur: 0.4, type: "sawtooth", vol: 0.18 }),
 };

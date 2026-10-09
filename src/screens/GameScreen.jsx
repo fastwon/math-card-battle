@@ -16,7 +16,7 @@ export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
-  limit, passives, items, itemMode,
+  limit, enemyAtk, passives, items, itemMode,
   onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
@@ -28,6 +28,7 @@ export default function GameScreen({
   const hpPct = Math.max(0,(enemyHp/enemyMaxHp)*100);
   const hpColor = hpPct>50?"#4ade80":hpPct>25?"#facc15":"#f87171";
   const maxSize = maxHandSize(round);
+  const handCount = hand.filter(c => !c.breaking).length; // 깨지는 중인 카드는 제외
 
   // 내 캐릭터: 클리어한 라운드 수만큼 성장한 이미지, 남은 턴이 체력바 역할
   const playerImg = Math.min(Math.max(0, round - 1), 10);
@@ -37,6 +38,9 @@ export default function GameScreen({
 
   return (
     <div className={screenShake ? "screen-shake" : ""} style={{ minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
+
+      {/* 마왕 분노: 화면 테두리가 붉게 맥동 */}
+      {enemyAtk.enraged && <div className="rage-border" style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:80 }} />}
 
       {/* 큰 타격 시 화면 번쩍임 */}
       {flashId > 0 && <div key={flashId} className="hit-flash" style={{ position:"fixed", inset:0, background:"#fff", opacity:0, pointerEvents:"none", zIndex:90 }} />}
@@ -59,7 +63,7 @@ export default function GameScreen({
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
         <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
-        <span style={{ background: hand.length>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {hand.length}/{maxSize}</span>
+        <span style={{ background: handCount>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {handCount}/{maxSize}</span>
       </div>
 
       {/* 보유 패시브 (보상을 하나라도 얻은 뒤부터 표시) */}
@@ -99,8 +103,10 @@ export default function GameScreen({
         <div style={{ flex:1, minWidth:0, textAlign:"center" }}>
           <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
             <div key={`p-${round}-${hitId}`} className={enemyHp<=0 ? "player-win" : hitId>0 ? "player-lunge" : ""}>
-              <div className="bob">
-                <img src={`/player/player${playerImg}.png`} alt="나" style={{ height:104, maxWidth:"100%", objectFit:"contain", display:"block" }} />
+              <div key={`hurt-${enemyAtk.id}`} className={enemyAtk.attacking ? "player-hurt" : ""}>
+                <div className="bob">
+                  <img src={`/player/player${playerImg}.png`} alt="나" style={{ height:104, maxWidth:"100%", objectFit:"contain", display:"block" }} />
+                </div>
               </div>
             </div>
           </div>
@@ -118,9 +124,11 @@ export default function GameScreen({
         <div style={{ flex:1, minWidth:0, textAlign:"center", position:"relative" }}>
           <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
             <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""}>
-              <div className={enemyHp>0 ? "bob" : ""} style={{ animationDelay:"-1.2s" }}>
-                {/* R11~20 (20라운드 주기의 뒤 10라운드): 적 색 반전 */}
-                <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block", filter: isMirrorRound(round) ? "invert(1)" : "none" }} />
+              <div key={`atk-${enemyAtk.id}`} className={enemyAtk.attacking ? "enemy-attack" : ""}>
+                <div className={enemyHp>0 ? "bob" : ""} style={{ animationDelay:"-1.2s" }}>
+                  {/* R11~20 (20라운드 주기의 뒤 10라운드): 적 색 반전 */}
+                  <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block", filter: isMirrorRound(round) ? "invert(1)" : "none" }} />
+                </div>
               </div>
             </div>
           </div>
@@ -137,6 +145,11 @@ export default function GameScreen({
           <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
           <StatBar pct={hpPct} color={hpColor} />
           <div style={{ fontSize:11, color:"#d1d5db" }}>HP {enemyHp}/{enemyMaxHp}</div>
+          {enemyAtk.active && enemyHp > 0 && (
+            <div className={enemyAtk.timer <= 1 ? "warn-blink" : ""} style={{ fontSize:11, marginTop:2, fontWeight:"bold", color: enemyAtk.timer <= 1 ? "#f87171" : enemyAtk.enraged ? "#fca5a5" : "#fbbf24", whiteSpace:"nowrap" }}>
+              {enemyAtk.enraged && "😡 "}{enemyAtk.boss ? "👿 공격" : "⚠️ 공격"}{enemyAtk.timer <= 1 ? " 임박!" : `까지 ${enemyAtk.timer}턴`}
+            </div>
+          )}
         </div>
       </div>
 
@@ -157,9 +170,10 @@ export default function GameScreen({
           const isSel = !!selected.find(c=>c.id===card.id);
           const isOp = card.type==="op";
           const isItemTarget = itemMode && itemMode.targetId === card.id;
-          const notAllowed = itemMode?.type === "pen" && !canUpgradeNumber(card); // 마법 펜: 연산·9는 선택 불가
+          const notAllowed = card.locked || (itemMode?.type === "pen" && !canUpgradeNumber(card)); // 봉인, 마법 펜(연산·9)
           return (
-            <div key={card.id} onClick={()=>onToggleCard(card)} className="card-in" style={{
+            <div key={card.id} onClick={()=>onToggleCard(card)} className={card.breaking ? "card-break" : card.locked ? "card-in card-seal" : "card-in"} style={{
+              position:"relative", filter: card.locked ? "grayscale(0.8)" : "none",
               animationDelay: turn===1 ? `${i*60}ms` : "0ms",
               width:50, height:70, borderRadius:10, display:"flex", flexDirection:"column",
               alignItems:"center", justifyContent:"center", cursor: notAllowed ? "not-allowed" : "pointer", fontWeight:"bold",
@@ -173,6 +187,7 @@ export default function GameScreen({
             }}>
               <div>{card.value}</div>
               <div style={{ fontSize:9, marginTop:2, opacity:0.7 }}>{isOp?"연산":"숫자"}</div>
+              {card.locked && <div style={{ position:"absolute", top:-8, right:-6, fontSize:16, filter:"drop-shadow(0 1px 2px #000)" }}>🔒</div>}
             </div>
           );
         })}

@@ -171,6 +171,21 @@ export function isMirrorRound(round) {
   return (round - 1) % 20 >= 10;
 }
 
+// 적의 공격: R6부터 일정 턴마다 손패 1장 파괴. 마왕(기준 라운드 10)은 파괴 + 봉인, HP 절반 이하면 분노(봉인 장수 증가)
+export const ENEMY_ATTACK_FROM_ROUND = 6;
+export const BOSS_SEAL_COUNT = 1;       // 마왕 평소 봉인 장수
+export const BOSS_RAGE_SEAL_COUNT = 2;  // 분노(HP 절반 이하) 시 봉인 장수 (주기는 그대로)
+// 공격 주기: R15까지 6턴, R16부터 5턴 (이후 유지)
+export function attackInterval(round) {
+  return round >= 16 ? 5 : 6;
+}
+export function enemyAttacks(round) {
+  return round >= ENEMY_ATTACK_FROM_ROUND;
+}
+export function isBossRound(round) {
+  return baseRound(round) === 10;
+}
+
 export function getEnemy(round) {
   return ENEMIES[(round - 1) % ENEMIES.length];
 }

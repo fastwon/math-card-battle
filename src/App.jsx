@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { play } from "./sfx";
 import { playBgm } from "./bgm";
-import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound } from "./game/rules";
+import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
+  enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, getEnemy } from "./game/rules";
 import { rollRewardOptions, applyReward, EMPTY_ITEMS } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
@@ -50,6 +51,11 @@ export default function App() {
   const [rewardOptions, setRewardOptions] = useState([]);
   const [itemMode, setItemMode] = useState(null); // { type:"pen", cardId? } | { type:"clone", targetId? }
 
+  // 적의 공격 (R6~): 공격까지 남은 턴, 마왕 분노 여부, 공격 연출용 id
+  const [atkTimer, setAtkTimer] = useState(attackInterval(1));
+  const [enraged, setEnraged] = useState(false);
+  const [enemyAtkId, setEnemyAtkId] = useState(0);
+
   // 타격 연출
   const [hitId, setHitId] = useState(0);
   const [dmgPops, setDmgPops] = useState([]);
@@ -73,8 +79,8 @@ export default function App() {
     if (screen !== "game") playBgm("lobby");
     else if (phase === "gameover") playBgm(null);
     else if (base <= 6) playBgm("battle", 132 + (base - 1) * 3, rev);
-    else playBgm("boss", 150 + (base - 7) * 2, rev);
-  }, [screen, phase, round]);
+    else playBgm("boss", 150 + (base - 7) * 2 + (enraged ? 16 : 0), rev);
+  }, [screen, phase, round, enraged]);
 
   // ── 랭킹 ──
   async function fetchTop10(tab) {
@@ -213,6 +219,7 @@ export default function App() {
 
   function toggleCard(card) {
     if (phase !== "play") return;
+    if (card.locked || card.breaking) return;
     if (itemMode) { handleItemCardTap(card); return; }
     const isSel = selected.some(c=>c.id===card.id);
     play(isSel ? "deselect" : "select");
@@ -229,6 +236,7 @@ export default function App() {
 
   function endTurn(skip = false) {
     let newHand = hand;
+    let rageNow = false;
     if (!skip) {
       if (!exprValue || exprValue <= 0) return;
       const dmg = exprValue;
@@ -243,7 +251,7 @@ export default function App() {
 
       if (newHp <= 0) {
         const perfect = newTotal === enemyMaxHp;
-        const allIn = selected.length === hand.length;
+        const allIn = selected.length === hand.filter(c => !c.locked).length;
         const multiplier = (perfect ? 2 : 1) * (allIn ? 2 : 1);
         const base = roundScore(newMax / turn);
         const fs = roundScore(base * multiplier);
@@ -288,6 +296,7 @@ export default function App() {
       }
       const usedIds = new Set(selected.map(c=>c.id));
       newHand = hand.filter(c=>!usedIds.has(c.id));
+      if (isBossRound(round) && !enraged && newHp <= enemyMaxHp / 2) rageNow = true;
     } else {
       play("skip");
       setLog(prev=>[`💤 턴${turn}: 턴 넘김`, ...prev.slice(0,4)]);
@@ -302,14 +311,71 @@ export default function App() {
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, "turnLimit");
       return;
     }
-    // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
-    if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4 && !newHand.some(c => c.type === "op" && c.value === "×")) {
-      setHand(newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand);
-    } else {
-      setHand(addCard(newHand, round, passives));
+    // 마왕 분노: 봉인 장수 증가 (공격 주기는 그대로)
+    if (rageNow) {
+      setEnraged(true);
+      play("rage");
+      setKillBanner({ text: "😡 마왕 분노!", sub: `봉인 ${BOSS_SEAL_COUNT}장 → ${BOSS_RAGE_SEAL_COUNT}장 (파괴 1장은 그대로)`, color: "#ef4444", long: true });
+      fxTimeout(() => setKillBanner(null), 2100);
     }
-    if (newHand.length < maxHandSize(round)) fxTimeout(() => play("draw"), skip ? 0 : 250);
+    const isRaging = enraged || rageNow;
+
+    // 적의 공격 (R6~): 남은 턴이 0이 되면 1장 파괴. 마왕은 파괴 + 봉인(평소 1장, 분노 2장)
+    let attack = null; // { victim, index, sealed: [] }
+    if (enemyAttacks(round)) {
+      let timer = atkTimer - 1;
+      if (timer <= 0) {
+        timer = attackInterval(round);
+        attack = { victim: null, index: -1, sealed: [] };
+        if (isBossRound(round)) newHand = newHand.map(c => c.locked ? { ...c, locked: false } : c); // 이전 봉인 해제
+        if (newHand.length) {
+          const i = Math.floor(Math.random() * newHand.length);
+          attack.victim = newHand[i]; attack.index = i;
+          newHand = newHand.filter((_, k) => k !== i);
+        }
+        if (isBossRound(round)) {
+          const n = Math.min(isRaging ? BOSS_RAGE_SEAL_COUNT : BOSS_SEAL_COUNT, newHand.length);
+          const pool = newHand.map((_, k) => k);
+          const picked = new Set();
+          while (picked.size < n) picked.add(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+          newHand = newHand.map((c, k) => picked.has(k) ? { ...c, locked: true } : c);
+          attack.sealed = newHand.filter((_, k) => picked.has(k));
+        }
+      }
+      setAtkTimer(timer);
+    }
+
+    // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
+    let drawn;
+    if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4 && !newHand.some(c => c.type === "op" && c.value === "×")) {
+      drawn = newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand;
+    } else {
+      drawn = addCard(newHand, round, passives);
+    }
+    if (newHand.length < maxHandSize(round)) fxTimeout(() => play("draw"), attack ? 700 : skip ? 0 : 250);
     setTurn(nextTurn);
+
+    if (!attack) { setHand(drawn); return; }
+
+    // 공격 연출: 적 돌진 → 카드 파괴(깨지는 카드는 잠깐 남겨 두었다가 제거) + 봉인. 연출 동안 입력 잠금
+    const enemyName = getEnemy(round).name;
+    setEnemyAtkId(n => n + 1);
+    setPhase("enemy");
+    fxTimeout(() => play("enemyAttack"), 250); // CSS 연출(0.25초 뒤 돌진)과 맞춤
+    if (attack.victim) {
+      const shown = [...drawn];
+      shown.splice(attack.index, 0, { ...attack.victim, breaking: true });
+      setHand(shown);
+      fxTimeout(() => play("cardBreak"), 450);
+      fxTimeout(() => setHand(h => h.filter(c => !c.breaking)), 950);
+    } else setHand(drawn);
+    if (attack.sealed.length) fxTimeout(() => play("seal"), 650);
+    const parts = [];
+    if (attack.victim) parts.push(`카드 ${attack.victim.value} 파괴`);
+    if (attack.sealed.length) parts.push(`${attack.sealed.map(c => c.value).join(", ")} 봉인`);
+    const icon = isBossRound(round) ? "👿" : "👹";
+    setLog(prev => [`${icon} ${enemyName}의 공격! ${parts.length ? parts.join(" · ") : "(부술 카드가 없다)"}`, ...prev.slice(0,4)]);
+    fxTimeout(() => setPhase(p => p === "enemy" ? "play" : p), 950);
   }
 
   // 게임 도중 포기: 점수가 있으면 게임오버와 같은 방식으로 랭킹 등록 여부를 물음
@@ -333,6 +399,17 @@ export default function App() {
     setEnemyMaxHp(mhp); setEnemyHp(mhp);
     setHand(genHand(r, pv)); setSelected([]); setTurn(1); setLog([]);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setItemMode(null); setPhase("play");
+    setAtkTimer(attackInterval(r)); setEnraged(false);
+  }
+
+  // 마왕 라운드 시작 연출 (delay: 다른 배너가 먼저 뜨면 그 뒤에)
+  function bossIntro(r, delay = 0) {
+    if (!isBossRound(r)) return;
+    fxTimeout(() => {
+      play("bossAppear");
+      setKillBanner({ text: "👿 마왕 강림", sub: `${attackInterval(r)}턴마다 카드 파괴 + 봉인 · HP 절반 이하에서 분노`, color: "#a855f7", long: true });
+      fxTimeout(() => setKillBanner(null), 2100);
+    }, delay);
   }
 
   function nextRound(pv = passives) {
@@ -341,6 +418,7 @@ export default function App() {
     setRound(round + 1);
     restartRound(round + 1, pv);
   }
+  // nextRound 뒤에 부르는 곳(보상 선택)에서 마왕 연출을 띄움
 
   // 보상 선택 → 적용 후 바로 다음 라운드. 아이템 3종이 모이면 부활 자동 합성
   function pickReward(opt) {
@@ -355,6 +433,7 @@ export default function App() {
       setKillBanner({ text: "✨ 히든 합성!", sub: "🔄 ✏️ 🪞 → 💖 부활 획득", color: "#f472b6", long: true });
       fxTimeout(() => setKillBanner(null), 2100);
     }
+    bossIntro(round + 1, res.synthesized ? 2200 : 300);
   }
 
   // 부활: 부활 1개를 쓰고 같은 라운드를 처음부터 (실패한 시도의 점수는 버림)
@@ -365,6 +444,7 @@ export default function App() {
     play("revive");
     setKillBanner({ text: "💖 부활!", sub: `${reason} — R${round} 재도전`, color: "#f472b6", long: true });
     fxTimeout(() => setKillBanner(null), 2100);
+    bossIntro(round, 2200);
   }
 
   // ── 아이템 사용 ──
@@ -374,8 +454,10 @@ export default function App() {
     setSelected([]);
     if (key === "reroll") {
       setItemMode(null);
-      setHand(drawHand(hand.length, passives));
+      const hadLock = hand.some(c => c.locked);
+      setHand(drawHand(hand.length, passives)); // 새로 뽑은 카드에는 봉인이 없음 → 봉인 초기화
       setItems(i => ({ ...i, reroll: i.reroll - 1 }));
+      if (hadLock) setLog(prev => ["🔄 리롤: 봉인이 풀렸다", ...prev.slice(0,4)]);
       play("item");
       return;
     }
@@ -436,6 +518,7 @@ export default function App() {
       enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
       fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
       limit={turnLimit(round, passives.timeExt)}
+      enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy" }}
       passives={passives} items={items} itemMode={itemMode}
       onUseItem={useItem} onCancelItem={()=>setItemMode(null)}
       exprDisplay={exprDisplay} exprValue={exprValue}
@@ -455,7 +538,7 @@ export default function App() {
           onSubmit={submitScore}
           onSkipRegistration={()=>setRegistrationSkipped(true)}
           onShare={shareResult}
-          onNextRound={()=>nextRound()}
+          onNextRound={()=>{ nextRound(); bossIntro(round + 1, 300); }}
           rewardOptions={rewardOptions} passives={passives} items={items} onPickReward={pickReward}
           nextThresh={thresholdFor(difficulty, round + 1, passives.relax)}
           onRetry={()=>startGame(difficulty)}
