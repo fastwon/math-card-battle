@@ -79,6 +79,13 @@ for (const tr of Object.values(TRACKS)) {
     tr[ch].ev.forEach(([s, n, l]) => tr.steps[s].push({ kind: "tone", f: freq(n), l, type: tr[ch].type, vol: tr[ch].vol }));
   }
   tr.drums.forEach(([s, k]) => tr.steps[s].push({ kind: k }));
+
+  // 역재생 버전: 음 순서를 뒤집고(시작 칸 = 64 - 시작 - 길이), 소리 모양도 뒤집어 재생
+  tr.stepsRev = Array.from({ length: 64 }, () => []);
+  tr.steps.forEach((evs, s) => evs.forEach(e => {
+    const ns = e.kind === "tone" ? (64 - s - e.l + 64) % 64 : 63 - s;
+    tr.stepsRev[ns].push(e);
+  }));
 }
 
 // ── 오디오 ──
@@ -96,45 +103,64 @@ function init() {
   return ctx;
 }
 
-function voice(out, t, f, dur, type, vol) {
+function voice(out, t, f, dur, type, vol, rev = false) {
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = type; o.frequency.value = f;
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-  g.gain.setValueAtTime(vol, t + dur * 0.6);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  if (rev) {
+    g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.9);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  } else {
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.setValueAtTime(vol, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
   o.connect(g).connect(out);
   o.start(t); o.stop(t + dur + 0.02);
 }
-function kick(out, t, vol) {
+function kick(out, t, vol, rev = false) {
   const o = ctx.createOscillator(), g = ctx.createGain();
-  o.frequency.setValueAtTime(150, t);
-  o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  if (rev) {  // 거꾸로: 낮은 음에서 올라가며 커지다가 끊김
+    o.frequency.setValueAtTime(40, t);
+    o.frequency.exponentialRampToValueAtTime(150, t + 0.14);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.14);
+    g.gain.linearRampToValueAtTime(0.0001, t + 0.15);
+  } else {
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  }
   o.connect(g).connect(out); o.start(t); o.stop(t + 0.16);
 }
-function noise(out, t, dur, vol, hp) {
+function noise(out, t, dur, vol, hp, rev = false) {
   const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
   s.buffer = noiseBuf; f.type = "highpass"; f.frequency.value = hp;
-  g.gain.setValueAtTime(vol, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  if (rev) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.9);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  } else {
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
   s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + dur + 0.02);
 }
 
 // ── 시퀀서 ──
-let current = null;   // { name, bpm, out(GainNode) }
+let current = null;   // { name, bpm, rev(역재생), out(GainNode) }
 let wanted = null;    // 음소거 중에도 기억해 두는 "지금 틀어야 할 곡"
 let step = 0, nextTime = 0, timer = null;
 
 function scheduleStep(t) {
-  const tr = TRACKS[current.name], out = current.out;
+  const tr = TRACKS[current.name], out = current.out, rev = current.rev;
   const sixteenth = 60 / current.bpm / 4;
-  for (const e of tr.steps[step]) {
-    if (e.kind === "tone") voice(out, t, e.f, e.l * sixteenth * 0.95, e.type, e.vol);
-    else if (e.kind === "kick") kick(out, t, 0.8 * tr.drumVol);
-    else if (e.kind === "snare") { noise(out, t, 0.14, 0.35 * tr.drumVol, 1500); voice(out, t, 180, 0.08, "triangle", 0.2 * tr.drumVol); }
-    else if (e.kind === "hat") noise(out, t, 0.04, 0.12 * tr.drumVol, 7000);
+  for (const e of (rev ? tr.stepsRev : tr.steps)[step]) {
+    if (e.kind === "tone") voice(out, t, e.f, e.l * sixteenth * 0.95, e.type, e.vol, rev);
+    else if (e.kind === "kick") kick(out, t, 0.8 * tr.drumVol, rev);
+    else if (e.kind === "snare") { noise(out, t, 0.14, 0.35 * tr.drumVol, 1500, rev); voice(out, t, 180, 0.08, "triangle", 0.2 * tr.drumVol, rev); }
+    else if (e.kind === "hat") noise(out, t, 0.04, 0.12 * tr.drumVol, 7000, rev);
   }
 }
 function tick() {
@@ -156,14 +182,14 @@ function fadeOut(cur) {
   setTimeout(() => cur.out.disconnect(), 600);
 }
 
-function start(name, bpm) {
+function start(name, bpm, rev) {
   if (!init()) return;
-  if (current?.name === name) { current.bpm = bpm; return; }
+  if (current?.name === name && current.rev === rev) { current.bpm = bpm; return; }
   if (current) fadeOut(current);
   const out = ctx.createGain();
   out.gain.value = 1;
   out.connect(bus);
-  current = { name, bpm, out };
+  current = { name, bpm, rev, out };
   step = 0;
   nextTime = ctx.currentTime + 0.1;
   if (!timer) timer = setInterval(tick, 25);
@@ -176,11 +202,11 @@ function halt() {
   timer = null;
 }
 
-// 곡 재생 (같은 곡이면 템포만 갱신). name=null 이면 정지
-export function playBgm(name, bpm) {
-  wanted = name ? { name, bpm: bpm ?? TRACKS[name].bpm } : null;
+// 곡 재생 (같은 곡·같은 방향이면 템포만 갱신). name=null 이면 정지, rev=true 면 역재생
+export function playBgm(name, bpm, rev = false) {
+  wanted = name ? { name, bpm: bpm ?? TRACKS[name].bpm, rev } : null;
   if (muted || !wanted) { halt(); return; }
-  start(wanted.name, wanted.bpm);
+  start(wanted.name, wanted.bpm, wanted.rev);
 }
 
 export function isBgmMuted() { return muted; }
@@ -189,7 +215,7 @@ export function setBgmMuted(v) {
   muted = v;
   try { localStorage.setItem(MUTE_KEY, v ? "1" : "0"); } catch { /* 무시 */ }
   if (muted) halt();
-  else if (wanted) start(wanted.name, wanted.bpm);
+  else if (wanted) start(wanted.name, wanted.bpm, wanted.rev);
 }
 
 // 브라우저는 사용자의 첫 터치/클릭 전에는 소리를 막음 → 터치 때마다 재개 시도

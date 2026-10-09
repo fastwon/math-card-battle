@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { play } from "./sfx";
 import { playBgm } from "./bgm";
-import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber } from "./game/rules";
+import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound } from "./game/rules";
 import { rollRewardOptions, applyReward, EMPTY_ITEMS } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
@@ -66,12 +66,14 @@ export default function App() {
 
   useEffect(() => { fetchTop10("easy"); }, []);
 
-  // 배경음악: 메인·랭킹 = 로비, R1~6 = 전투, R7~ = 보스. 라운드마다 템포 상승, 게임오버 시 정지
+  // 배경음악: 메인·랭킹 = 로비, 기준 라운드 1~6 = 전투, 7~10 = 보스 (기준 라운드마다 템포 상승), 게임오버 시 정지
+  // 20라운드 주기: R11~20은 R1~10 곡을 역재생, R21~ 반복 (baseRound / isMirrorRound)
   useEffect(() => {
+    const base = baseRound(round), rev = isMirrorRound(round);
     if (screen !== "game") playBgm("lobby");
     else if (phase === "gameover") playBgm(null);
-    else if (round <= 6) playBgm("battle", 132 + (round - 1) * 3);
-    else playBgm("boss", Math.min(150 + (round - 7) * 2, 166));
+    else if (base <= 6) playBgm("battle", 132 + (base - 1) * 3, rev);
+    else playBgm("boss", 150 + (base - 7) * 2, rev);
   }, [screen, phase, round]);
 
   // ── 랭킹 ──

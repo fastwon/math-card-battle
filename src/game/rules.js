@@ -163,6 +163,14 @@ export const ENEMIES = [
   { name: "외계인",   img: "/enemies/enemy9.png"  },
   { name: "마왕",     img: "/enemies/enemy10.png" },
 ];
+// 20라운드 주기: R1~10 기본, R11~20은 R1~10의 반전판(BGM 역재생 + 적 색 반전), R21부터 반복
+export function baseRound(round) {
+  return ((round - 1) % 10) + 1;
+}
+export function isMirrorRound(round) {
+  return (round - 1) % 20 >= 10;
+}
+
 export function getEnemy(round) {
   return ENEMIES[(round - 1) % ENEMIES.length];
 }

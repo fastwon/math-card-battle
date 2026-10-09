@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DIFFICULTIES, getEnemy, maxHandSize, canUpgradeNumber } from "../game/rules";
+import { DIFFICULTIES, getEnemy, maxHandSize, canUpgradeNumber, isMirrorRound } from "../game/rules";
 import SoundButtons from "../components/SoundButtons";
 import { PassiveBar, ItemBar, ItemPanel, ItemInfo } from "../components/Loadout";
 
@@ -119,7 +119,8 @@ export default function GameScreen({
           <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
             <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""}>
               <div className={enemyHp>0 ? "bob" : ""} style={{ animationDelay:"-1.2s" }}>
-                <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block" }} />
+                {/* R11~20 (20라운드 주기의 뒤 10라운드): 적 색 반전 */}
+                <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block", filter: isMirrorRound(round) ? "invert(1)" : "none" }} />
               </div>
             </div>
           </div>
