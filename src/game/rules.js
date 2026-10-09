@@ -3,9 +3,9 @@
 export const OPS = ["+", "-", "×", "÷"];
 
 export const DIFFICULTIES = {
-  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 2 },
-  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 3 },
-  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r },
+  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 3 },
+  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 5 },
+  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r * 2 },
 };
 
 function randInt(min, max) {
