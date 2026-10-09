@@ -78,6 +78,14 @@ function applyLuckyStart(hand, lv) {
   return hand;
 }
 
+// 마법 펜: 숫자 카드를 현재보다 큰 숫자(v+1 ~ 9) 중 하나로. 9는 올릴 수 없음
+export function canUpgradeNumber(card) {
+  return card.type === "num" && card.value < 9;
+}
+export function upgradeNumber(v) {
+  return randInt(v + 1, 9);
+}
+
 export function genHand(round, mods = {}) {
   return applyLuckyStart(drawHand(Math.min(5, maxHandSize(round)), mods), mods.luckyStart);
 }

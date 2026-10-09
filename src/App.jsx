@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { play } from "./sfx";
 import { playBgm } from "./bgm";
-import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor } from "./game/rules";
+import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber } from "./game/rules";
 import { rollRewardOptions, applyReward, EMPTY_ITEMS } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
@@ -382,9 +382,15 @@ export default function App() {
   }
 
   function handleItemCardTap(card) {
+    // 마법 펜: 숫자 카드(9 제외)를 더 큰 숫자로 무작위 변경. 연산·9는 선택되지 않음
     if (itemMode.type === "pen") {
-      play("select");
-      setItemMode({ type: "pen", cardId: card.id });
+      if (!canUpgradeNumber(card)) return;
+      const newValue = upgradeNumber(card.value);
+      setHand(h => h.map(c => c.id === card.id ? { ...c, value: newValue } : c));
+      setItems(i => ({ ...i, pen: i.pen - 1 }));
+      setLog(prev => [`✏️ 마법 펜: ${card.value} → ${newValue}`, ...prev.slice(0,4)]);
+      setItemMode(null);
+      play("item");
       return;
     }
     // 복제: 바꿀 카드 → 따라 할 카드 순서로 선택
@@ -397,16 +403,6 @@ export default function App() {
     const targetId = itemMode.targetId;
     setHand(h => h.map(c => c.id === targetId ? { ...c, type: card.type, value: card.value } : c));
     setItems(i => ({ ...i, clone: i.clone - 1 }));
-    setItemMode(null);
-    play("item");
-  }
-
-  function applyPen(value) {
-    if (itemMode?.type !== "pen" || !itemMode.cardId) return;
-    const cardId = itemMode.cardId;
-    const type = typeof value === "number" ? "num" : "op";
-    setHand(h => h.map(c => c.id === cardId ? { ...c, type, value } : c));
-    setItems(i => ({ ...i, pen: i.pen - 1 }));
     setItemMode(null);
     play("item");
   }
@@ -439,7 +435,7 @@ export default function App() {
       fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
       limit={turnLimit(round, passives.timeExt)}
       passives={passives} items={items} itemMode={itemMode}
-      onUseItem={useItem} onPenValue={applyPen} onCancelItem={()=>setItemMode(null)}
+      onUseItem={useItem} onCancelItem={()=>setItemMode(null)}
       exprDisplay={exprDisplay} exprValue={exprValue}
       onToggleCard={toggleCard}
       onAttack={()=>endTurn(false)}

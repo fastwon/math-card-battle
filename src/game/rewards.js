@@ -16,7 +16,7 @@ export const PASSIVES = {
 
 export const ITEMS = {
   reroll: { icon:"🔄", name:"리롤",    gain:2, desc:"손패 전체를 다시 뽑기" },
-  pen:    { icon:"✏️", name:"마법 펜", gain:1, desc:"카드 1장을 원하는 숫자·연산으로" },
+  pen:    { icon:"✏️", name:"마법 펜", gain:1, desc:"숫자 카드 1장을 더 큰 숫자로 (무작위)" },
   clone:  { icon:"🪞", name:"복제",    gain:1, desc:"카드 1장을 다른 카드와 똑같이" },
 };
 export const ITEM_MAX = 9;

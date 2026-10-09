@@ -62,31 +62,15 @@ export function ItemBar({ items, itemMode, onUse, disabled }) {
   );
 }
 
-const PEN_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, "+", "-", "×", "÷"];
-
-// 아이템 사용 중 안내 + (마법 펜) 값 선택판
-export function ItemPanel({ itemMode, onPenValue, onCancel }) {
+// 아이템 사용 중 안내 + 취소
+export function ItemPanel({ itemMode, onCancel }) {
   const guide =
-    itemMode.type === "pen" ? (itemMode.cardId ? "✏️ 바꿀 값을 고르세요" : "✏️ 바꿀 카드를 고르세요")
+    itemMode.type === "pen" ? "✏️ 올릴 숫자 카드를 고르세요 (9 제외)"
     : itemMode.targetId ? "🪞 따라 할 카드를 고르세요" : "🪞 바꿀 카드를 고르세요";
 
   return (
     <div style={{ width:"100%", maxWidth:340, background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.4)", borderRadius:12, padding:"8px 10px", marginBottom:8, textAlign:"center" }}>
-      <div style={{ fontSize:13, fontWeight:"bold", color:"#fde68a", marginBottom: itemMode.type === "pen" && itemMode.cardId ? 8 : 6 }}>{guide}</div>
-      {itemMode.type === "pen" && itemMode.cardId && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(9, 1fr)", gap:4, marginBottom:8 }}>
-          {PEN_VALUES.map(v => {
-            const isOp = typeof v !== "number";
-            return (
-              <button key={v} onClick={() => onPenValue(v)} style={{
-                gridColumn: isOp && v === "+" ? "3 / span 1" : undefined,
-                height:32, borderRadius:7, border:"1.5px solid rgba(255,255,255,0.35)", cursor:"pointer", color:"#fff", fontWeight:"bold", fontSize:15,
-                background: isOp ? "linear-gradient(135deg,#4c1d95,#6d28d9)" : "linear-gradient(135deg,#1e3a8a,#1d4ed8)",
-              }}>{v}</button>
-            );
-          })}
-        </div>
-      )}
+      <div style={{ fontSize:13, fontWeight:"bold", color:"#fde68a", marginBottom:6 }}>{guide}</div>
       <button onClick={onCancel} style={{ padding:"4px 16px", borderRadius:14, border:"1px solid rgba(255,255,255,0.25)", background:"rgba(255,255,255,0.07)", color:"#d1d5db", fontSize:12, cursor:"pointer" }}>취소</button>
     </div>
   );

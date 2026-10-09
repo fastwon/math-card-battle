@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DIFFICULTIES, getEnemy, maxHandSize } from "../game/rules";
+import { DIFFICULTIES, getEnemy, maxHandSize, canUpgradeNumber } from "../game/rules";
 import SoundButtons from "../components/SoundButtons";
 import { PassiveBar, ItemBar, ItemPanel } from "../components/Loadout";
 
@@ -17,7 +17,7 @@ export default function GameScreen({
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
   limit, passives, items, itemMode,
-  onToggleCard, onAttack, onSkip, onQuit, onUseItem, onPenValue, onCancelItem, children,
+  onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
   const { hitId, dmgPops, screenShake, flashId, killBanner } = fx;
@@ -154,15 +154,17 @@ export default function GameScreen({
         {hand.map((card, i)=>{
           const isSel = !!selected.find(c=>c.id===card.id);
           const isOp = card.type==="op";
-          const isItemTarget = itemMode && (itemMode.cardId === card.id || itemMode.targetId === card.id);
+          const isItemTarget = itemMode && itemMode.targetId === card.id;
+          const notAllowed = itemMode?.type === "pen" && !canUpgradeNumber(card); // 마법 펜: 연산·9는 선택 불가
           return (
             <div key={card.id} onClick={()=>onToggleCard(card)} className="card-in" style={{
               animationDelay: turn===1 ? `${i*60}ms` : "0ms",
               width:50, height:70, borderRadius:10, display:"flex", flexDirection:"column",
-              alignItems:"center", justifyContent:"center", cursor:"pointer", fontWeight:"bold",
+              alignItems:"center", justifyContent:"center", cursor: notAllowed ? "not-allowed" : "pointer", fontWeight:"bold",
+              opacity: notAllowed ? 0.35 : 1,
               fontSize: isOp?20:24,
               background: isSel ? (isOp?"linear-gradient(135deg,#7c3aed,#a855f7)":"linear-gradient(135deg,#1d4ed8,#3b82f6)") : (isOp?"linear-gradient(135deg,#4c1d95,#6d28d9)":"linear-gradient(135deg,#1e3a8a,#1d4ed8)"),
-              border: isItemTarget ? "2px solid #f472b6" : itemMode ? "2px dashed #fbbf24" : isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
+              border: isItemTarget ? "2px solid #f472b6" : itemMode && !notAllowed ? "2px dashed #fbbf24" : isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
               boxShadow: isItemTarget ? "0 0 14px rgba(244,114,182,0.8)" : isSel?"0 0 12px rgba(255,255,255,0.4)":"0 2px 6px rgba(0,0,0,0.4)",
               transform: isSel||isItemTarget?"translateY(-8px) scale(1.05)":"none",
               transition:"all 0.2s", userSelect:"none", color:"#fff",
@@ -175,7 +177,7 @@ export default function GameScreen({
       </div>
 
       {/* 아이템 사용 중: 안내 + 마법 펜 값 선택 */}
-      {phase==="play" && itemMode && <ItemPanel itemMode={itemMode} onPenValue={onPenValue} onCancel={onCancelItem} />}
+      {phase==="play" && itemMode && <ItemPanel itemMode={itemMode} onCancel={onCancelItem} />}
 
       {/* Buttons */}
       {phase==="play" && !itemMode && (
