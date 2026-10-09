@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DIFFICULTIES, getEnemy, maxHandSize, canUpgradeNumber } from "../game/rules";
 import SoundButtons from "../components/SoundButtons";
-import { PassiveBar, ItemBar, ItemPanel } from "../components/Loadout";
+import { PassiveBar, ItemBar, ItemPanel, ItemInfo } from "../components/Loadout";
 
 function StatBar({ pct, color }) {
   return (
@@ -20,6 +20,7 @@ export default function GameScreen({
   onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
+  const [infoKey, setInfoKey] = useState(null); // 설명을 열어 둔 아이템
   const { hitId, dmgPops, screenShake, flashId, killBanner } = fx;
 
   const diff = DIFFICULTIES[difficulty];
@@ -197,7 +198,13 @@ export default function GameScreen({
       )}
 
       {/* 보유 아이템 */}
-      <ItemBar items={items} itemMode={itemMode} onUse={onUseItem} disabled={phase!=="play"} />
+      <ItemBar items={items} itemMode={itemMode} infoKey={infoKey}
+        onInfo={key => { if (itemMode) onCancelItem(); setInfoKey(key); }} />
+      {infoKey && items[infoKey] > 0 && !itemMode && (
+        <ItemInfo itemKey={infoKey} count={items[infoKey]} canUse={phase==="play"}
+          onUse={() => { onUseItem(infoKey); setInfoKey(null); }}
+          onClose={() => setInfoKey(null)} />
+      )}
 
       <div style={{ fontSize:11, color:"#6b7280", marginBottom:6 }}>💡 같은 숫자 3개 연속 → 제곱 (9 9 9 = 81)</div>
 

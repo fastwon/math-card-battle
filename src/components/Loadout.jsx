@@ -34,30 +34,54 @@ export function PassiveBar({ passives }) {
   );
 }
 
-// 보유 아이템 버튼 (아이콘 옆 개수) + 부활 표시
-export function ItemBar({ items, itemMode, onUse, disabled }) {
-  const keys = Object.keys(ITEMS).filter(k => items[k] > 0);
-  if (!keys.length && !items.revive) return null;
+// 부활은 직접 쓰는 아이템이 아니라 설명만 보여줌
+const REVIVE_INFO = { icon:"💖", name:"부활", desc:"게임오버(기준 미달·턴 초과) 때 자동으로 사용되어 그 라운드를 처음부터 다시 도전합니다. 최대 1개." };
+const itemDef = key => key === "revive" ? REVIVE_INFO : ITEMS[key];
+
+// 보유 아이템 버튼 (아이콘 옆 개수). 누르면 바로 쓰지 않고 설명(ItemInfo)을 엶
+export function ItemBar({ items, itemMode, infoKey, onInfo }) {
+  const keys = [...Object.keys(ITEMS), "revive"].filter(k => items[k] > 0);
+  if (!keys.length) return null;
   return (
     <div style={{ display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap", marginBottom:8 }}>
       {keys.map(key => {
-        const active = itemMode?.type === key;
+        const active = itemMode?.type === key || infoKey === key;
+        const color = key === "revive" ? "244,114,182" : "251,191,36";
         return (
-          <button key={key} onClick={() => onUse(key)} disabled={disabled} title={`${ITEMS[key].name}: ${ITEMS[key].desc}`} style={{
-            padding:"5px 11px", borderRadius:16, cursor: disabled ? "not-allowed" : "pointer", color:"#fff", fontSize:13, fontWeight:"bold",
-            border:`1.5px solid ${active ? "#fbbf24" : "rgba(251,191,36,0.4)"}`,
-            background: active ? "rgba(251,191,36,0.3)" : "rgba(251,191,36,0.1)",
-            boxShadow: active ? "0 0 10px rgba(251,191,36,0.5)" : "none", opacity: disabled ? 0.5 : 1,
+          <button key={key} onClick={() => onInfo(infoKey === key ? null : key)} title={itemDef(key).name} style={{
+            padding:"5px 11px", borderRadius:16, cursor:"pointer", color:"#fff", fontSize:13, fontWeight:"bold",
+            border:`1.5px solid rgba(${color},${active ? 1 : 0.45})`,
+            background:`rgba(${color},${active ? 0.3 : 0.1})`,
+            boxShadow: active ? `0 0 10px rgba(${color},0.5)` : "none",
           }}>
-            {ITEMS[key].icon} <span style={{ fontSize:12 }}>{items[key]}</span>
+            {itemDef(key).icon} <span style={{ fontSize:12 }}>{items[key]}</span>
           </button>
         );
       })}
-      {items.revive > 0 && (
-        <span title="부활: 게임오버 시 자동으로 그 라운드 재도전" style={{ padding:"5px 11px", borderRadius:16, fontSize:13, fontWeight:"bold", border:"1.5px solid rgba(244,114,182,0.6)", background:"rgba(244,114,182,0.15)" }}>
-          💖 <span style={{ fontSize:12 }}>{items.revive}</span>
-        </span>
-      )}
+    </div>
+  );
+}
+
+// 아이템 설명 카드. 부활 외에는 [사용] 버튼
+export function ItemInfo({ itemKey, count, canUse, onUse, onClose }) {
+  const def = itemDef(itemKey);
+  const isRevive = itemKey === "revive";
+  const btn = { padding:"5px 18px", borderRadius:14, fontSize:12, fontWeight:"bold", cursor:"pointer" };
+  return (
+    <div style={{ width:"100%", maxWidth:340, background:"rgba(15,12,41,0.85)", border:`1px solid ${isRevive ? "rgba(244,114,182,0.5)" : "rgba(251,191,36,0.45)"}`, borderRadius:12, padding:"10px 12px", marginBottom:8 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ fontSize:26 }}>{def.icon}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:"bold" }}>{def.name} <span style={{ fontSize:11, color:"#9ca3af", fontWeight:"normal" }}>보유 {count}개</span></div>
+          <div style={{ fontSize:11, color:"#d1d5db", marginTop:2, lineHeight:1.5 }}>{def.desc}</div>
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:8 }}>
+        {!isRevive && (
+          <button onClick={onUse} disabled={!canUse} style={{ ...btn, border:"none", color:"#1f1300", background: canUse ? "linear-gradient(135deg,#f59e0b,#fbbf24)" : "rgba(255,255,255,0.15)", cursor: canUse ? "pointer" : "not-allowed" }}>사용</button>
+        )}
+        <button onClick={onClose} style={{ ...btn, border:"1px solid rgba(255,255,255,0.25)", background:"rgba(255,255,255,0.07)", color:"#d1d5db" }}>닫기</button>
+      </div>
     </div>
   );
 }
