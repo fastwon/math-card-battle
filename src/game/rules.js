@@ -94,12 +94,29 @@ export function addCard(h, r, mods = {}) {
   return [...h, genCard(h, mods)];
 }
 
+// i부터 같은 숫자 카드가 n장 연속인지
+function sameRun(selected, i, n) {
+  const c = selected[i];
+  if (i + n > selected.length) return false;
+  for (let k = 1; k < n; k++) {
+    const d = selected[i+k];
+    if (d.type !== "num" || d.value !== c.value) return false;
+  }
+  return true;
+}
+
+// 같은 숫자 연속: 5 이하 4장 → 세제곱 (먼저 확인), 3장 → 제곱
+// ※ 세제곱(4장)이 생기면서 짝수 장 올인이 가능해져 점수 상한이 바뀜 → DB score_max_limit도 함께 갱신해야 함
+export const CUBE_MAX = 5;
 export function parseExpression(selected) {
   if (!selected.length) return null;
   let tokens = [], i = 0;
   while (i < selected.length) {
     const c = selected[i];
-    if (c.type==="num" && i+2<selected.length &&
+    if (c.type==="num" && c.value <= CUBE_MAX && sameRun(selected, i, 4)) {
+      tokens.push({ type:"num", value: c.value**3, display:`${c.value}³` });
+      i += 4;
+    } else if (c.type==="num" && i+2<selected.length &&
         selected[i+1].type==="num" && selected[i+2].type==="num" &&
         selected[i+1].value===c.value && selected[i+2].value===c.value) {
       tokens.push({ type:"num", value: c.value**2, display:`${c.value}²` });

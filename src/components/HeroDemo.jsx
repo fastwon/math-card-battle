@@ -6,6 +6,7 @@ const DEMOS = [
   { cards:["7","×","8"], result:"56" },
   { cards:["9","9","9"], result:"81", note:"같은 숫자 3장 = 제곱!" },
   { cards:["6","+","4","×","9"], result:"42" },
+  { cards:["5","5","5","5"], result:"125", note:"5 이하 4장 = 세제곱!" },
 ];
 
 const DEMO_ENEMY_COUNT = 7; // 후반 보스(R8~)는 메인에서 숨김

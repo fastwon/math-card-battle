@@ -206,7 +206,9 @@ export default function GameScreen({
           onClose={() => setInfoKey(null)} />
       )}
 
-      <div style={{ fontSize:11, color:"#6b7280", marginBottom:6 }}>💡 같은 숫자 3개 연속 → 제곱 (9 9 9 = 81)</div>
+      <div style={{ fontSize:11, color:"#6b7280", marginBottom:6, textAlign:"center", lineHeight:1.6 }}>
+        💡 같은 숫자 3장 연속 → 제곱 (9 9 9 = 81)<br />5 이하 같은 숫자 4장 연속 → 세제곱 (5 5 5 5 = 125)
+      </div>
 
       {/* Log */}
       {log.length>0 && (
