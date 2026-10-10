@@ -98,14 +98,14 @@ export default function App() {
   // 화면이 바뀔 때 모바일 확대(핀치 줌) 상태를 원래대로
   useEffect(() => { resetZoom(); }, [screen]);
 
-  // 배경음악: 메인·랭킹 = 로비, 기준 라운드 1~6 = 전투, 7~10 = 보스 (기준 라운드마다 템포 상승), 게임오버 시 정지
+  // 배경음악: 메인·랭킹 = 로비, 기준 라운드 1~5 = 전투, 6~10 = 보스 (기준 라운드마다 템포 상승), 게임오버 시 정지
   // 20라운드 주기: R11~20은 R1~10 곡을 역재생, R21~ 반복 (baseRound / isMirrorRound)
   useEffect(() => {
     const base = baseRound(round), rev = isMirrorRound(round);
     if (screen !== "game") playBgm("lobby");
     else if (phase === "gameover") playBgm(null);
-    else if (base <= 6) playBgm("battle", 132 + (base - 1) * 3, rev);
-    else playBgm("boss", 150 + (base - 7) * 2 + (enraged ? 16 : 0), rev);
+    else if (base <= 5) playBgm("battle", 132 + (base - 1) * 3, rev);
+    else playBgm("boss", 150 + (base - 6) * 2 + (enraged ? 16 : 0), rev); // 적의 공격이 시작되는 6라운드부터 보스 테마
   }, [screen, phase, round, enraged]);
 
   // ── 랭킹 ──
