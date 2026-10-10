@@ -1,6 +1,7 @@
 // 게임 규칙: 난이도, 카드 생성, 수식 계산, 적 정보
 
 export const OPS = ["+", "-", "×", "÷"];
+export const SQUARE = "²"; // 조합 '연산 지배자'로 생기는 연산 카드: 바로 앞 낱장 숫자를 제곱
 
 export const DIFFICULTIES = {
   // hpGrowth: 라운드마다 적 HP가 몇 배씩 늘어나는지
@@ -21,13 +22,15 @@ export function makeCard(type, value) {
 
 // 큰 수의 축복: 레벨별 숫자 가중치 (적히지 않은 숫자는 1)
 const BIGNUM_WEIGHTS = [null, { 1:0.5 }, { 1:0 }, { 1:0, 2:0.5 }, { 1:0, 2:0 }, { 1:0, 2:0, 3:0.5 }];
-function randNum(bigNumLv) {
-  if (!bigNumLv) return randInt(1, 9);
-  const w = BIGNUM_WEIGHTS[bigNumLv];
-  const weights = [1,2,3,4,5,6,7,8,9].map(n => w[n] ?? 1);
+// ten: 조합 '황금 손' → 숫자 카드 풀에 10 추가
+function randNum(bigNumLv, ten = false) {
+  if (!bigNumLv && !ten) return randInt(1, 9);
+  const w = BIGNUM_WEIGHTS[bigNumLv] || {};
+  const nums = ten ? [1,2,3,4,5,6,7,8,9,10] : [1,2,3,4,5,6,7,8,9];
+  const weights = nums.map(n => w[n] ?? 1);
   let r = Math.random() * weights.reduce((a, b) => a + b, 0);
-  for (let n = 1; n <= 9; n++) { r -= weights[n-1]; if (r < 0) return n; }
-  return 9;
+  for (let k = 0; k < nums.length; k++) { r -= weights[k]; if (r < 0) return nums[k]; }
+  return nums[nums.length - 1];
 }
 
 export function genCard(hand = [], mods = {}) {
@@ -35,7 +38,8 @@ export function genCard(hand = [], mods = {}) {
   const opChance = 0.3 + 0.02 * (mods.opSense || 0);           // 연산 감각
   const isOp = opCount >= 4 ? false : Math.random() < opChance;
   if (isOp) {
-    const availableOps = OPS.filter(op => hand.filter(c => c.type === "op" && c.value === op).length < 3);
+    const pool = mods.square ? [...OPS, SQUARE] : OPS; // 연산 지배자: ² 카드 추가 (× 외 나머지와 같은 확률)
+    const availableOps = pool.filter(op => hand.filter(c => c.type === "op" && c.value === op).length < 3);
     if (availableOps.length > 0) {
       if (mods.mulMaster && availableOps.includes("×")) {        // 곱셈 숙련
         const others = availableOps.filter(op => op !== "×");
@@ -45,13 +49,12 @@ export function genCard(hand = [], mods = {}) {
       return makeCard("op", availableOps[Math.floor(Math.random() * availableOps.length)]);
     }
   }
-  return makeCard("num", randNum(mods.bigNum));
+  return makeCard("num", randNum(mods.bigNum, mods.ten));
 }
-export function maxHandSize(round) {
-  if (round <= 2) return 7;
-  if (round <= 4) return 8;
-  if (round <= 6) return 9;
-  return 10;
+// mods.handPlus: 조합 '영원의 모래시계' → 손패 최대 +1
+export function maxHandSize(round, mods = {}) {
+  const base = round <= 2 ? 7 : round <= 4 ? 8 : round <= 6 ? 9 : 10;
+  return base + (mods.handPlus || 0);
 }
 // size장 손패 생성 (숫자 2장 이상 + 연산 1장 이상이 되도록 재시도). 리롤 아이템도 사용
 export function drawHand(size, mods = {}) {
@@ -91,7 +94,7 @@ export function genHand(round, mods = {}) {
   return applyLuckyStart(drawHand(Math.min(5, maxHandSize(round)), mods), mods.luckyStart);
 }
 export function addCard(h, r, mods = {}) {
-  if (h.length >= maxHandSize(r)) return h;
+  if (h.length >= maxHandSize(r, mods)) return h;
   return [...h, genCard(h, mods)];
 }
 
@@ -122,11 +125,15 @@ export function parseExpression(selected) {
         selected[i+1].value===c.value && selected[i+2].value===c.value) {
       tokens.push({ type:"num", value: c.value**2, display:`${c.value}²` });
       i += 3;
+    } else if (c.type==="num" && selected[i+1]?.type==="op" && selected[i+1].value===SQUARE) {
+      tokens.push({ type:"num", value: c.value**2, display:`${c.value}²` }); // 낱장 숫자 + ² 카드
+      i += 2;
     } else {
       tokens.push({ ...c, display: String(c.value) });
       i++;
     }
   }
+  if (tokens.some(t => t.type==="op" && t.value===SQUARE)) return null; // 낱장 숫자 뒤가 아닌 ²(덩어리 뒤, 맨 앞, 연속)는 무효
   if (tokens[0].type==="op" || tokens[tokens.length-1].type==="op") return null;
   for (let j=0;j<tokens.length-1;j++) if (tokens[j].type===tokens[j+1].type) return null;
   const exprStr = tokens.map(t => t.type==="op" ? (t.value==="×"?"*":t.value==="÷"?"/":t.value) : t.value).join(" ");

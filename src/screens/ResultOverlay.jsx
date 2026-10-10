@@ -1,8 +1,27 @@
 import { DIFFICULTIES, enemyMaxHpFor, turnLimit } from "../game/rules";
-import { PASSIVES, ITEMS } from "../game/rewards";
+import { PASSIVES, ITEMS, COMBOS } from "../game/rewards";
 
 // 보상 선택지 카드 1장
 function RewardCard({ opt, passives, items, onPick }) {
+  if (opt.kind === "combo") {
+    const c = COMBOS[opt.key];
+    return (
+      <button onClick={() => onPick(opt)} style={{
+        display:"flex", alignItems:"center", gap:10, width:"100%", textAlign:"left", padding:"10px 12px", marginBottom:7,
+        borderRadius:12, border:"2px solid #fbbf24", background:"linear-gradient(135deg, rgba(251,191,36,0.22), rgba(168,85,247,0.22))",
+        color:"#fff", cursor:"pointer", boxShadow:"0 0 14px rgba(251,191,36,0.45)",
+      }}>
+        <div style={{ fontSize:24, flexShrink:0 }}>{c.icon}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:"bold", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            {c.name}
+            <span style={{ fontSize:10, color:"#fbbf24", border:"1px solid #fbbf24", borderRadius:8, padding:"0 5px" }}>✨ 조합</span>
+          </div>
+          <div style={{ fontSize:11, color:"#fde68a", marginTop:2 }}>{c.parts.map(p => PASSIVES[p].icon).join(" + ")} Lv5 → {c.desc}</div>
+        </div>
+      </button>
+    );
+  }
   const isPassive = opt.kind === "passive";
   const def = isPassive ? PASSIVES[opt.key] : ITEMS[opt.key];
   const badge = isPassive

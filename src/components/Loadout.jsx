@@ -1,17 +1,29 @@
 import { useState } from "react";
-import { PASSIVES, PASSIVE_SLOTS, PASSIVE_MAX_LV, ITEMS } from "../game/rewards";
+import { PASSIVES, PASSIVE_SLOTS, PASSIVE_MAX_LV, ITEMS, COMBOS } from "../game/rewards";
 
 // 보유 패시브 3칸 (레벨 점 표시). 누르면 현재 효과 설명
-export function PassiveBar({ passives }) {
+export function PassiveBar({ passives, combos = {} }) {
   const [open, setOpen] = useState(null);
   const owned = Object.keys(passives).filter(k => passives[k] > 0);
-  const slots = [...owned, ...Array(Math.max(0, PASSIVE_SLOTS - owned.length)).fill(null)];
+  const ownedCombos = Object.keys(COMBOS).filter(k => combos[k]);
+  // 칸 3개: 조합(금색) → 패시브 → 빈 칸
+  const slots = [...ownedCombos.map(k => ({ combo: k })), ...owned.map(k => ({ passive: k })),
+    ...Array(Math.max(0, PASSIVE_SLOTS - ownedCombos.length - owned.length)).fill(null)];
   const info = open && passives[open] ? PASSIVES[open] : null;
+  const comboInfo = open && combos[open] ? COMBOS[open] : null;
 
   return (
     <div style={{ width:"100%", maxWidth:340, marginBottom:8 }}>
       <div style={{ display:"flex", gap:6 }}>
-        {slots.map((key, i) => key ? (
+        {slots.map((slot, i) => slot?.combo ? (
+          <button key={slot.combo} onClick={() => setOpen(open === slot.combo ? null : slot.combo)} style={{
+            flex:1, minWidth:0, padding:"4px 0", borderRadius:10, cursor:"pointer", color:"#fde68a", fontSize:11, fontWeight:"bold", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+            border:`1px solid ${open === slot.combo ? "#fbbf24" : "rgba(251,191,36,0.6)"}`, background:"linear-gradient(135deg, rgba(251,191,36,0.25), rgba(168,85,247,0.25))",
+            boxShadow:"0 0 8px rgba(251,191,36,0.35)",
+          }}>
+            {COMBOS[slot.combo].icon} {COMBOS[slot.combo].name}
+          </button>
+        ) : slot?.passive ? (() => { const key = slot.passive; return (
           <button key={key} onClick={() => setOpen(open === key ? null : key)} style={{
             flex:1, minWidth:0, padding:"4px 0", borderRadius:10, cursor:"pointer", color:"#fff",
             border:`1px solid ${open === key ? "#c084fc" : "rgba(192,132,252,0.35)"}`, background:"rgba(124,58,237,0.18)",
@@ -21,13 +33,22 @@ export function PassiveBar({ passives }) {
               {"●".repeat(passives[key])}<span style={{ opacity:0.3 }}>{"●".repeat(PASSIVE_MAX_LV - passives[key])}</span>
             </span>
           </button>
-        ) : (
+        ); })() : (
           <div key={`empty-${i}`} style={{ flex:1, borderRadius:10, border:"1px dashed rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#6b7280", minHeight:30 }}>빈 칸</div>
         ))}
       </div>
       {info && (
         <div style={{ marginTop:5, fontSize:11, color:"#ddd6fe", textAlign:"center" }}>
           {info.icon} {info.name} Lv{passives[open]} · {info.levels[passives[open] - 1]}
+        </div>
+      )}
+      {comboInfo && (
+        <div style={{ marginTop:5, fontSize:11, color:"#fde68a", lineHeight:1.6, background:"rgba(0,0,0,0.35)", border:"1px solid rgba(251,191,36,0.4)", borderRadius:10, padding:"6px 10px" }}>
+          <div style={{ fontWeight:"bold" }}>{comboInfo.icon} {comboInfo.name} (조합)</div>
+          {comboInfo.parts.map(p => (
+            <div key={p} style={{ color:"#ddd6fe" }}>{PASSIVES[p].icon} {PASSIVES[p].name} Lv{PASSIVE_MAX_LV} · {PASSIVES[p].levels[PASSIVE_MAX_LV - 1]}</div>
+          ))}
+          <div>✨ 새 능력 · {comboInfo.desc}</div>
         </div>
       )}
     </div>

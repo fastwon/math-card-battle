@@ -3,7 +3,7 @@ import { play } from "./sfx";
 import { playBgm } from "./bgm";
 import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
   enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, getEnemy } from "./game/rules";
-import { rollRewardOptions, applyReward, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
+import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
 import { resetZoom } from "./utils/viewport";
@@ -48,6 +48,8 @@ export default function App() {
 
   // 보상: 패시브 레벨 { bigNum: 2, ... }, 아이템 개수, 라운드 클리어 시 선택지, 아이템 사용 중 상태
   const [passives, setPassives] = useState({});
+  const [combos, setCombos] = useState({}); // 조합 { goldenHand: true, ... } — 두 패시브의 Lv5 효과 + 새 능력
+  const mods = modsFrom(passives, combos); // 실제 적용 효과 (패시브 + 조합)
   const [items, setItems] = useState(EMPTY_ITEMS);
   const [rewardOptions, setRewardOptions] = useState([]);
   const [itemMode, setItemMode] = useState(null); // { type:"pen", cardId? } | { type:"clone", targetId? }
@@ -234,7 +236,7 @@ export default function App() {
     setDifficulty(diff);
     setRound(1); setEnemyMaxHp(enemyMaxHpFor(1)); setEnemyHp(enemyMaxHpFor(1));
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
-    setPassives({}); setItems(EMPTY_ITEMS); setRewardOptions([]); setItemMode(null);
+    setPassives({}); setCombos({}); setItems(EMPTY_ITEMS); setRewardOptions([]); setItemMode(null);
     setAtkTimer(attackInterval(1)); setEnraged(false);
     setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
@@ -255,7 +257,7 @@ export default function App() {
 
   // reason: "turnLimit"(턴 초과) | "quit"(도중 포기)
   function triggerGameOver(newTS, currentDiff, currentRound, currentTurn, currentMaxDmg, currentThresh, reason) {
-    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: reason === "turnLimit", quit: reason === "quit", limit: turnLimit(currentRound, passives.timeExt) });
+    setScore({ base: 0, perfect: false, finalScore: 0, turnCount: currentTurn, maxD: currentMaxDmg, thresh: currentThresh, newTS, turnLimitExceeded: reason === "turnLimit", quit: reason === "quit", limit: turnLimit(currentRound, mods.timeExt) });
     setTotalScore(newTS);
     setPhase("gameover");
     loadPreRank(newTS, currentDiff, currentRound);
@@ -300,7 +302,7 @@ export default function App() {
         const multiplier = (perfect ? 2 : 1) * (allIn ? 2 : 1);
         const base = roundScore(newMax / turn);
         const fs = roundScore(base * multiplier);
-        const thresh = thresholdFor(difficulty, round, passives.relax);
+        const thresh = thresholdFor(difficulty, round, mods.relax);
         const isGO = fs <= thresh;
         setSelected([]);
         setItemMode(null);
@@ -319,7 +321,7 @@ export default function App() {
         setScore({ base, perfect, allIn, multiplier, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
         setTotalScore(newTS);
         setRoundScores(newRS);
-        if (!isGO) setRewardOptions(rollRewardOptions(passives, items));
+        if (!isGO) setRewardOptions(rollRewardOptions(passives, items, combos));
         setPhase("kill");
         setKillBanner(
           perfect && allIn ? { text: "⚡ COMBO ×4!", color: "#fbbf24" }
@@ -349,9 +351,9 @@ export default function App() {
     setSelected([]);
 
     const nextTurn = turn + 1;
-    if (nextTurn > turnLimit(round, passives.timeExt)) {
-      if (items.revive > 0) { revive(`턴 초과 (${turnLimit(round, passives.timeExt)}턴)`); return; }
-      const thresh = thresholdFor(difficulty, round, passives.relax);
+    if (nextTurn > turnLimit(round, mods.timeExt)) {
+      if (items.revive > 0) { revive(`턴 초과 (${turnLimit(round, mods.timeExt)}턴)`); return; }
+      const thresh = thresholdFor(difficulty, round, mods.relax);
       play("gameOver");
       triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresh, "turnLimit");
       return;
@@ -395,11 +397,11 @@ export default function App() {
     // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
     let drawn;
     if (nextTurn === 6 && newHand.filter(c => c.type === "op").length < 4 && !newHand.some(c => c.type === "op" && c.value === "×")) {
-      drawn = newHand.length < maxHandSize(round) ? [...newHand, makeCard("op", "×")] : newHand;
+      drawn = newHand.length < maxHandSize(round, mods) ? [...newHand, makeCard("op", "×")] : newHand;
     } else {
-      drawn = addCard(newHand, round, passives);
+      drawn = addCard(newHand, round, mods);
     }
-    if (newHand.length < maxHandSize(round)) fxTimeout(() => play("draw"), attack ? 700 : skip ? 0 : 250);
+    if (newHand.length < maxHandSize(round, mods)) fxTimeout(() => play("draw"), attack ? 700 : skip ? 0 : 250);
     setTurn(nextTurn);
 
     if (!attack) { setHand(drawn); return; }
@@ -441,7 +443,7 @@ export default function App() {
     setSelected([]);
     play("gameOver");
     setItemMode(null);
-    triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresholdFor(difficulty, round, passives.relax), "quit");
+    triggerGameOver(totalScore, difficulty, round, turn, maxDmg, thresholdFor(difficulty, round, mods.relax), "quit");
   }
 
   // r 라운드를 처음 상태로 (다음 라운드 진입, 부활 재도전 공용). pv = 적용할 패시브
@@ -464,7 +466,7 @@ export default function App() {
     }, delay);
   }
 
-  function nextRound(pv = passives) {
+  function nextRound(pv = mods) {
     clearFx();
     play("click");
     setRound(round + 1);
@@ -474,12 +476,19 @@ export default function App() {
 
   // 보상 선택 → 적용 후 바로 다음 라운드. 아이템 3종이 모이면 부활 자동 합성
   function pickReward(opt) {
-    const res = applyReward(opt, passives, items);
+    const res = applyReward(opt, passives, items, combos);
     setPassives(res.passives);
+    setCombos(res.combos);
     setItems(res.items);
     setRewardOptions([]);
-    nextRound(res.passives);
+    nextRound(modsFrom(res.passives, res.combos));
     play("levelUp");
+    if (opt.kind === "combo") {
+      const c = COMBOS[opt.key];
+      play("synth");
+      setKillBanner({ text: `✨ 조합 완성!`, sub: `${c.icon} ${c.name} — ${c.desc}`, color: "#fbbf24", long: true });
+      fxTimeout(() => setKillBanner(null), 2100);
+    }
     if (res.synthesized) {
       play("synth");
       setKillBanner({ text: "✨ 히든 합성!", sub: "🔄 ✏️ 🪞 → 💖 부활 획득", color: "#f472b6", long: true });
@@ -492,7 +501,7 @@ export default function App() {
   function revive(reason) {
     clearFx();
     setItems(i => ({ ...i, revive: i.revive - 1 }));
-    restartRound(round, passives);
+    restartRound(round, mods);
     play("revive");
     setKillBanner({ text: "💖 부활!", sub: `${reason} — R${round} 재도전`, color: "#f472b6", long: true });
     fxTimeout(() => setKillBanner(null), 2100);
@@ -507,7 +516,7 @@ export default function App() {
     if (key === "reroll") {
       setItemMode(null);
       const hadLock = hand.some(c => c.locked);
-      setHand(drawHand(hand.length, passives)); // 새로 뽑은 카드에는 봉인이 없음 → 봉인 초기화
+      setHand(drawHand(hand.length, mods)); // 새로 뽑은 카드에는 봉인이 없음 → 봉인 초기화
       setItems(i => ({ ...i, reroll: i.reroll - 1 }));
       if (hadLock) setLog(prev => ["🔄 리롤: 봉인이 풀렸다", ...prev.slice(0,4)]);
       play("item");
@@ -569,9 +578,9 @@ export default function App() {
       difficulty={difficulty} round={round} turn={turn} hand={hand} selected={selected} phase={phase} log={log}
       enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
       fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
-      limit={turnLimit(round, passives.timeExt)}
+      limit={turnLimit(round, mods.timeExt)} handMax={maxHandSize(round, mods)}
       enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy", blocked: atkBlocked }}
-      passives={passives} items={items} itemMode={itemMode}
+      passives={passives} combos={combos} items={items} itemMode={itemMode}
       onUseItem={useItem} onCancelItem={()=>setItemMode(null)}
       exprDisplay={exprDisplay} exprValue={exprValue}
       onToggleCard={toggleCard}
@@ -592,7 +601,7 @@ export default function App() {
           onShare={shareResult}
           onNextRound={()=>{ nextRound(); bossIntro(round + 1, 300); }}
           rewardOptions={rewardOptions} passives={passives} items={items} onPickReward={pickReward}
-          nextThresh={thresholdFor(difficulty, round + 1, passives.relax)}
+          nextThresh={thresholdFor(difficulty, round + 1, mods.relax)}
           onRetry={()=>startGame(difficulty)}
           onGoMain={goMain}
         />

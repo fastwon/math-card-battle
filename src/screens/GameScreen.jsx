@@ -16,7 +16,7 @@ export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
-  limit, enemyAtk, passives, items, itemMode,
+  limit, handMax, enemyAtk, passives, combos, items, itemMode,
   onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
@@ -27,7 +27,7 @@ export default function GameScreen({
   const enemy = getEnemy(round);
   const hpPct = Math.max(0,(enemyHp/enemyMaxHp)*100);
   const hpColor = hpPct>50?"#4ade80":hpPct>25?"#facc15":"#f87171";
-  const maxSize = maxHandSize(round);
+  const maxSize = handMax ?? maxHandSize(round);
   const handCount = hand.filter(c => !c.breaking).length; // 깨지는 중인 카드는 제외
 
   // 내 캐릭터: 클리어한 라운드 수만큼 성장한 이미지, 남은 턴이 체력바 역할
@@ -67,7 +67,7 @@ export default function GameScreen({
       </div>
 
       {/* 보유 패시브 (보상을 하나라도 얻은 뒤부터 표시) */}
-      {(Object.values(passives).some(v => v > 0) || Object.values(items).some(v => v > 0)) && <PassiveBar passives={passives} />}
+      {(Object.values(passives).some(v => v > 0) || Object.values(combos).some(Boolean) || Object.values(items).some(v => v > 0)) && <PassiveBar passives={passives} combos={combos} />}
 
       {/* 총점 (hover/click 시 라운드별 상세) */}
       {roundScores.length > 0 && (
