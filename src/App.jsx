@@ -3,7 +3,7 @@ import { play } from "./sfx";
 import { playBgm } from "./bgm";
 import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
   enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, getEnemy } from "./game/rules";
-import { rollRewardOptions, applyReward, EMPTY_ITEMS } from "./game/rewards";
+import { rollRewardOptions, applyReward, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
 import { resetZoom } from "./utils/viewport";
@@ -56,6 +56,12 @@ export default function App() {
   const [atkTimer, setAtkTimer] = useState(attackInterval(1));
   const [enraged, setEnraged] = useState(false);
   const [enemyAtkId, setEnemyAtkId] = useState(0);
+  const [atkBlocked, setAtkBlocked] = useState(false); // 방패로 막은 공격이면 내 캐릭터가 움찔하지 않음
+
+  // 히든 (라운드당 1회): 숫자 수집가 = 한 라운드에 1~9를 모두 공격에 사용, 사칙연산 마스터 = 손패에 + − × ÷ 동시 보유
+  const [digitsUsed, setDigitsUsed] = useState([]);
+  const [digitsHiddenDone, setDigitsHiddenDone] = useState(false);
+  const [opsHiddenDone, setOpsHiddenDone] = useState(false);
 
   // 타격 연출
   const [hitId, setHitId] = useState(0);
@@ -72,6 +78,20 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { fetchTop10("easy"); }, []);
+
+  // 히든 '사칙연산 마스터': 손패에 + − × ÷가 모두 있으면 🛡️ 방패 (라운드당 1회, 최대 1개)
+  useEffect(() => {
+    if (screen !== "game" || phase !== "play" || opsHiddenDone) return;
+    const ops = new Set(hand.filter(c => c.type === "op" && !c.breaking).map(c => c.value));
+    if (!["+", "-", "×", "÷"].every(op => ops.has(op))) return;
+    setOpsHiddenDone(true);
+    const gained = items.shield < SHIELD_MAX;
+    if (gained) setItems(i => ({ ...i, shield: i.shield + 1 }));
+    play("synth");
+    setKillBanner({ text: "🛡️ 사칙연산 마스터!", sub: gained ? "+ − × ÷ 모두 보유 → 다음 적 공격 1회 방어" : "+ − × ÷ 모두 보유 (방패는 이미 가지고 있음)", color: "#38bdf8", long: true });
+    fxTimeout(() => setKillBanner(null), 2100);
+    setLog(prev => [gained ? "🛡️ 사칙연산 마스터! 방패 획득" : "🛡️ 사칙연산 마스터! (방패 이미 보유)", ...prev.slice(0,4)]);
+  }, [hand, phase, screen, opsHiddenDone]);
 
   // 화면이 바뀔 때 모바일 확대(핀치 줌) 상태를 원래대로
   useEffect(() => { resetZoom(); }, [screen]);
@@ -215,6 +235,8 @@ export default function App() {
     setRound(1); setEnemyMaxHp(enemyMaxHpFor(1)); setEnemyHp(enemyMaxHpFor(1));
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
     setPassives({}); setItems(EMPTY_ITEMS); setRewardOptions([]); setItemMode(null);
+    setAtkTimer(attackInterval(1)); setEnraged(false);
+    setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
     setNickname(""); setNicknameSubmitted(false); setRegistrationSkipped(false);
@@ -245,17 +267,35 @@ export default function App() {
     if (!skip) {
       if (!exprValue || exprValue <= 0) return;
       const dmg = exprValue;
-      const newHp = Math.max(0, enemyHp - dmg);
+      let newHp = Math.max(0, enemyHp - dmg);
       const newMax = Math.max(maxDmg, dmg);
       setMaxDmg(newMax);
       const newTotal = totalDmgDealt + dmg;
       setTotalDmgDealt(newTotal);
       playHitFx(dmg);
-      setEnemyHp(newHp);
       setLog(prev=>[`⚔️ 턴${turn}: ${exprDisplay} = ${dmg}!`, ...prev.slice(0,4)]);
 
+      // 히든 '숫자 수집가': 이번 라운드 공격에 1~9를 모두 쓰면 남은 HP의 30% 추가 피해
+      // (공격이 아니라서 최고 데미지·점수에는 안 들어감, 추가 피해로는 처치하지 않음)
+      const usedNow = [...new Set([...digitsUsed, ...selected.filter(c => c.type === "num").map(c => c.value)])];
+      setDigitsUsed(usedNow);
+      if (newHp > 0 && !digitsHiddenDone && usedNow.length === 9) {
+        const bonus = Math.min(newHp - 1, Math.floor(newHp * 0.3));
+        setDigitsHiddenDone(true);
+        if (bonus > 0) {
+          newHp -= bonus;
+          fxTimeout(() => setDmgPops(prev => [...prev, { id: Date.now() + Math.random(), dmg: bonus, ratio: 0.3, bonus: true }]), 350);
+        }
+        play("synth");
+        setKillBanner({ text: "🔢 숫자 수집가!", sub: `1~9 모두 사용 → 추가 피해 ${bonus}`, color: "#c084fc", long: true });
+        fxTimeout(() => setKillBanner(null), 2100);
+        setLog(prev => [`🔢 숫자 수집가! 추가 피해 ${bonus}`, ...prev.slice(0,4)]);
+      }
+      setEnemyHp(newHp);
+
       if (newHp <= 0) {
-        const perfect = newTotal === enemyMaxHp;
+        // 퍼펙트 = 마지막 공격이 남은 HP와 정확히 같음 (추가 피해가 없으면 '총 데미지 = 최대 HP'와 동일)
+        const perfect = dmg === enemyHp;
         const allIn = selected.length === hand.filter(c => !c.locked).length;
         const multiplier = (perfect ? 2 : 1) * (allIn ? 2 : 1);
         const base = roundScore(newMax / turn);
@@ -331,14 +371,16 @@ export default function App() {
       let timer = atkTimer - 1;
       if (timer <= 0) {
         timer = attackInterval(round);
-        attack = { victim: null, index: -1, sealed: [] };
+        attack = { victim: null, index: -1, sealed: [], blocked: items.shield > 0 };
         if (isBossRound(round)) newHand = newHand.map(c => c.locked ? { ...c, locked: false } : c); // 이전 봉인 해제
-        if (newHand.length) {
+        if (attack.blocked) {
+          setItems(i => ({ ...i, shield: i.shield - 1 }));
+        } else if (newHand.length) {
           const i = Math.floor(Math.random() * newHand.length);
           attack.victim = newHand[i]; attack.index = i;
           newHand = newHand.filter((_, k) => k !== i);
         }
-        if (isBossRound(round)) {
+        if (isBossRound(round) && !attack.blocked) {
           const n = Math.min(isRaging ? BOSS_RAGE_SEAL_COUNT : BOSS_SEAL_COUNT, newHand.length);
           const pool = newHand.map((_, k) => k);
           const picked = new Set();
@@ -365,6 +407,7 @@ export default function App() {
     // 공격 연출: 적 돌진 → 카드 파괴(깨지는 카드는 잠깐 남겨 두었다가 제거) + 봉인. 연출 동안 입력 잠금
     const enemyName = getEnemy(round).name;
     setEnemyAtkId(n => n + 1);
+    setAtkBlocked(attack.blocked);
     setPhase("enemy");
     fxTimeout(() => play("enemyAttack"), 250); // CSS 연출(0.25초 뒤 돌진)과 맞춤
     if (attack.victim) {
@@ -379,7 +422,10 @@ export default function App() {
     if (attack.victim) parts.push(`카드 ${attack.victim.value} 파괴`);
     if (attack.sealed.length) parts.push(`${attack.sealed.map(c => c.value).join(", ")} 봉인`);
     const icon = isBossRound(round) ? "👿" : "👹";
-    setLog(prev => [`${icon} ${enemyName}의 공격! ${parts.length ? parts.join(" · ") : "(부술 카드가 없다)"}`, ...prev.slice(0,4)]);
+    if (attack.blocked) {
+      fxTimeout(() => play("seal"), 450);
+      setLog(prev => [`🛡️ 방패로 ${enemyName}의 공격을 막았다!`, ...prev.slice(0,4)]);
+    } else setLog(prev => [`${icon} ${enemyName}의 공격! ${parts.length ? parts.join(" · ") : "(부술 카드가 없다)"}`, ...prev.slice(0,4)]);
     fxTimeout(() => setPhase(p => p === "enemy" ? "play" : p), 950);
   }
 
@@ -405,6 +451,7 @@ export default function App() {
     setHand(genHand(r, pv)); setSelected([]); setTurn(1); setLog([]);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setItemMode(null); setPhase("play");
     setAtkTimer(attackInterval(r)); setEnraged(false);
+    setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
   }
 
   // 마왕 라운드 시작 연출 (delay: 다른 배너가 먼저 뜨면 그 뒤에)
@@ -523,7 +570,7 @@ export default function App() {
       enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
       fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
       limit={turnLimit(round, passives.timeExt)}
-      enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy" }}
+      enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy", blocked: atkBlocked }}
       passives={passives} items={items} itemMode={itemMode}
       onUseItem={useItem} onCancelItem={()=>setItemMode(null)}
       exprDisplay={exprDisplay} exprValue={exprValue}

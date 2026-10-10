@@ -21,7 +21,8 @@ export const ITEMS = {
 };
 export const ITEM_MAX = 9;
 export const REVIVE_MAX = 1;
-export const EMPTY_ITEMS = { reroll:0, pen:0, clone:0, revive:0 };
+export const SHIELD_MAX = 1;
+export const EMPTY_ITEMS = { reroll:0, pen:0, clone:0, revive:0, shield:0 };
 
 function shuffle(arr) {
   const a = [...arr];

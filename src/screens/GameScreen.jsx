@@ -103,7 +103,7 @@ export default function GameScreen({
         <div style={{ flex:1, minWidth:0, textAlign:"center" }}>
           <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
             <div key={`p-${round}-${hitId}`} className={enemyHp<=0 ? "player-win" : hitId>0 ? "player-lunge" : ""}>
-              <div key={`hurt-${enemyAtk.id}`} className={enemyAtk.attacking ? "player-hurt" : ""}>
+              <div key={`hurt-${enemyAtk.id}`} className={enemyAtk.attacking && !enemyAtk.blocked ? "player-hurt" : ""}>
                 <div className="bob">
                   <img src={`/player/player${playerImg}.png`} alt="나" style={{ height:104, maxWidth:"100%", objectFit:"contain", display:"block" }} />
                 </div>
@@ -136,10 +136,10 @@ export default function GameScreen({
             <div key={p.id} className="dmg-pop" style={{
               position:"absolute", top:24, left:"50%", pointerEvents:"none", whiteSpace:"nowrap", zIndex:2,
               fontSize: 24 + Math.min(p.ratio, 1) * 26, fontWeight:900,
-              color: p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
+              color: p.bonus ? "#c084fc" : p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
               textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
             }}>
-              {p.ratio>=0.5 && "💥"}-{p.dmg}
+              {p.bonus ? "🔢" : p.ratio>=0.5 && "💥"}-{p.dmg}
             </div>
           ))}
           <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
