@@ -579,6 +579,7 @@ export default function App() {
       enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
       fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
       limit={turnLimit(round, mods.timeExt)} handMax={maxHandSize(round, mods)}
+      thresh={thresholdFor(difficulty, round, mods.relax)}
       enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy", blocked: atkBlocked }}
       passives={passives} combos={combos} items={items} itemMode={itemMode}
       onUseItem={useItem} onCancelItem={()=>setItemMode(null)}

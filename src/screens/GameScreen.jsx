@@ -16,7 +16,7 @@ export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
-  limit, handMax, enemyAtk, passives, combos, items, itemMode,
+  limit, handMax, thresh, enemyAtk, passives, combos, items, itemMode,
   onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
@@ -63,6 +63,7 @@ export default function GameScreen({
       <div style={{ display:"flex", gap:7, marginBottom:10, flexWrap:"wrap", justifyContent:"center" }}>
         <span style={{ background: diff.color+"44", border:`1px solid ${diff.color}`, borderRadius:20, padding:"3px 10px", fontSize:12 }}>{diff.emoji} {diff.label}</span>
         <span style={{ background:"#7c3aed", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🏆 R{round}</span>
+        <span title="라운드 점수가 이 값 이하면 게임오버" style={{ background:"rgba(239,68,68,0.18)", border:"1px solid rgba(248,113,113,0.6)", color:"#fecaca", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🎯 기준 {thresh}점</span>
         <span style={{ background: handCount>=maxSize?"#065f46":"#374151", borderRadius:20, padding:"3px 10px", fontSize:12 }}>🃏 {handCount}/{maxSize}</span>
       </div>
 
