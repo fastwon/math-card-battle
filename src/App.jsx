@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { play } from "./sfx";
 import { playBgm } from "./bgm";
 import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
-  enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, getEnemy } from "./game/rules";
+  enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, SEAL_TURNS, getEnemy } from "./game/rules";
 import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
@@ -350,6 +350,17 @@ export default function App() {
     }
     setSelected([]);
 
+    // 봉인은 SEAL_TURNS턴 동안만: 턴이 지날 때마다 1씩 줄고 0이 되면 해제
+    const unsealed = [];
+    newHand = newHand.map(c => {
+      if (!c.locked) return c;
+      const left = (c.lockLeft ?? SEAL_TURNS) - 1;
+      if (left > 0) return { ...c, lockLeft: left };
+      unsealed.push(c.value);
+      return { ...c, locked: false, lockLeft: undefined };
+    });
+    if (unsealed.length) setLog(prev => [`🔓 봉인 해제: 카드 ${unsealed.join(", ")}`, ...prev.slice(0,4)]);
+
     const nextTurn = turn + 1;
     if (nextTurn > turnLimit(round, mods.timeExt)) {
       if (items.revive > 0) { revive(`턴 초과 (${turnLimit(round, mods.timeExt)}턴)`); return; }
@@ -374,7 +385,6 @@ export default function App() {
       if (timer <= 0) {
         timer = attackInterval(round);
         attack = { victim: null, index: -1, sealed: [], blocked: items.shield > 0 };
-        if (isBossRound(round)) newHand = newHand.map(c => c.locked ? { ...c, locked: false } : c); // 이전 봉인 해제
         if (attack.blocked) {
           setItems(i => ({ ...i, shield: i.shield - 1 }));
         } else if (newHand.length) {
@@ -387,7 +397,7 @@ export default function App() {
           const pool = newHand.map((_, k) => k);
           const picked = new Set();
           while (picked.size < n) picked.add(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
-          newHand = newHand.map((c, k) => picked.has(k) ? { ...c, locked: true } : c);
+          newHand = newHand.map((c, k) => picked.has(k) ? { ...c, locked: true, lockLeft: SEAL_TURNS } : c);
           attack.sealed = newHand.filter((_, k) => picked.has(k));
         }
       }

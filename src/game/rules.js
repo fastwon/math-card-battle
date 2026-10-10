@@ -183,6 +183,7 @@ export function isMirrorRound(round) {
 export const ENEMY_ATTACK_FROM_ROUND = 6;
 export const BOSS_SEAL_COUNT = 1;       // 마왕 평소 봉인 장수
 export const BOSS_RAGE_SEAL_COUNT = 2;  // 분노(HP 절반 이하) 시 봉인 장수 (주기는 그대로)
+export const SEAL_TURNS = 4;            // 봉인 지속 턴 (지나면 저절로 해제)
 // 공격 주기: R15까지 6턴, R16부터 5턴 (이후 유지)
 export function attackInterval(round) {
   return round >= 16 ? 5 : 6;
