@@ -71,8 +71,19 @@ export default function ResultOverlay({
               <div style={{ fontSize:13, color:"#fca5a5", marginBottom:10 }}>
                 {score?.quit ? `R${round}에서 포기 · R${round-1}까지 클리어`
                   : score?.turnLimitExceeded ? `R${round} 턴 초과 (${score?.limit ?? turnLimit(round)}턴)`
-                  : `R${round} 점수 ${score?.finalScore?.toFixed(2)}점 — 기준 ${score?.thresh}점 미달`}
+                  : `R${round} 라운드 점수가 기준 이하`}
               </div>
+              {/* 기준 미달: 점수 계산식 */}
+              {!score?.quit && !score?.turnLimitExceeded && (
+                <div style={{ background:"rgba(0,0,0,0.35)", borderRadius:10, padding:"8px 14px", fontSize:12, lineHeight:1.9, marginBottom:12, textAlign:"left" }}>
+                  <div>💥 최고 데미지 <strong style={{ color:"#fbbf24" }}>{score?.maxD}</strong> ÷ ⏱️ {score?.turnCount}턴 = <strong style={{ color:"#fff" }}>{score?.base}</strong></div>
+                  {score?.perfect && <div style={{ color:"#4ade80" }}>✨ 퍼펙트 클리어! × 2</div>}
+                  {score?.allIn && <div style={{ color:"#fb923c" }}>🃏 올 인! × 2</div>}
+                  <div style={{ borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}>
+                    🏆 라운드 점수 <strong style={{ color:"#fca5a5", fontSize:15 }}>{score?.finalScore?.toFixed(2)}</strong> ≤ 🎯 기준 <strong style={{ color:"#fff", fontSize:15 }}>{score?.thresh}</strong>
+                  </div>
+                </div>
+              )}
             </>
           : <>
               <img src={`/player/player${Math.min(round, 10)}.png`} alt="player" style={{ height: rewardOptions.length ? "min(110px, 14vh)" : "min(200px, 28vh)", width:"auto", maxWidth:"100%", objectFit:"contain", marginBottom:4 }} />
