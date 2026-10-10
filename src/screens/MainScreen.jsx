@@ -56,7 +56,7 @@ export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpe
             <div style={{ fontSize:26, marginBottom:2 }}>{d.emoji}</div>
             <div style={{ color:"#fff", fontSize:16, fontWeight:"bold" }}>{d.label}</div>
             <div style={{ fontSize:10, color:"#d1d5db", marginTop:3, whiteSpace:"nowrap" }}>
-              {key==="easy" ? "기준 R×3점" : key==="normal" ? "기준 R×5점" : "기준 R²×2점"}
+              {key==="easy" ? "기준 R×2점" : key==="normal" ? "기준 R×4점" : "기준 R²×2점"}
             </div>
           </button>
         ))}

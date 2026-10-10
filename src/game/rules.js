@@ -5,8 +5,8 @@ export const SQUARE = "²"; // 조합 '연산 지배자'로 생기는 연산 카
 
 export const DIFFICULTIES = {
   // hpGrowth: 라운드마다 적 HP가 몇 배씩 늘어나는지
-  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 3,     hpGrowth: 1.3 },
-  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 5,     hpGrowth: 1.4 },
+  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 2,     hpGrowth: 1.3 },
+  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 4,     hpGrowth: 1.4 },
   hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r * 2, hpGrowth: 1.5 },
 };
 
