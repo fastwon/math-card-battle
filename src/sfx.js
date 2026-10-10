@@ -17,8 +17,40 @@ function ac() {
     master.gain.value = 0.21; // 전체 효과음 볼륨
     master.connect(ctx.destination);
   }
-  if (ctx.state === "suspended") ctx.resume();
+  resumeIfNeeded();
   return ctx;
+}
+
+// 꺼져 있으면(suspended, iOS의 interrupted 등) 다시 켬. 백그라운드 상태에선 켜지 않음
+function resumeIfNeeded() {
+  if (!ctx || ctx.state === "running" || ctx.state === "closed" || document.hidden) return;
+  ctx.resume().catch(() => { /* 사용자 조작 전이면 막힘 → 다음 조작 때 다시 시도 */ });
+}
+
+// 브라우저는 사용자 조작 안에서만 소리를 켤 수 있음.
+// 모바일 터치는 손가락이 '떨어질 때'(touchend·click)만 조작으로 인정되므로 여러 이벤트에서 모두 시도
+const UNLOCK_EVENTS = ["pointerdown", "pointerup", "touchstart", "touchend", "mousedown", "click", "keydown"];
+function unlock() {
+  if (!ctx || ctx.state === "running" || document.hidden) return;
+  resumeIfNeeded();
+  // iOS는 조작 중에 실제로 소리를 한 번 재생해야 오디오가 풀림 → 1샘플짜리 무음 재생
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, 22050);
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch { /* 무시 */ }
+}
+if (typeof document !== "undefined") {
+  UNLOCK_EVENTS.forEach(e => document.addEventListener(e, unlock, { capture: true, passive: true }));
+  // 다른 탭/앱으로 가면 멈추고, 돌아오면 이어서 재생 (막히면 다음 터치 때 unlock이 켬)
+  document.addEventListener("visibilitychange", () => {
+    if (!ctx) return;
+    if (document.hidden) { if (ctx.state === "running") ctx.suspend().catch(() => {}); }
+    else resumeIfNeeded();
+  });
+  window.addEventListener("pageshow", resumeIfNeeded); // 뒤로가기 캐시에서 복원될 때
+  window.addEventListener("focus", resumeIfNeeded);
 }
 
 function getNoise(c) {

@@ -218,15 +218,4 @@ export function setBgmMuted(v) {
   else if (wanted) start(wanted.name, wanted.bpm, wanted.rev);
 }
 
-// 브라우저는 사용자의 첫 터치/클릭 전에는 소리를 막음 → 터치 때마다 재개 시도
-if (typeof document !== "undefined") {
-  const unlock = () => { if (ctx && ctx.state === "suspended" && !document.hidden) ctx.resume(); };
-  document.addEventListener("pointerdown", unlock);
-  document.addEventListener("keydown", unlock);
-  // 다른 탭/앱으로 가면 멈추고, 돌아오면 이어서 재생
-  document.addEventListener("visibilitychange", () => {
-    if (!ctx) return;
-    if (document.hidden) ctx.suspend();
-    else ctx.resume();
-  });
-}
+// 오디오 켜기(첫 터치·백그라운드 복귀)는 같은 AudioContext를 쓰는 sfx.js에서 한 곳으로 처리
