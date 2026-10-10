@@ -9,6 +9,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* 카드·버튼을 빠르게 두 번 탭해도 화면이 확대되지 않게 (손가락 두 개로 벌리는 확대는 그대로 가능) */
+html, body {
+  touch-action: manipulation;
+}
+
 /* ── 타격감 연출 ── */
 @keyframes dmgFloat {
   0%   { opacity: 0; transform: translate(-50%, 0) scale(0.4); }

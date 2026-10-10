@@ -6,6 +6,7 @@ import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseE
 import { rollRewardOptions, applyReward, EMPTY_ITEMS } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
+import { resetZoom } from "./utils/viewport";
 import MainScreen from "./screens/MainScreen";
 import RankingScreen from "./screens/RankingScreen";
 import GameScreen from "./screens/GameScreen";
@@ -71,6 +72,9 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { fetchTop10("easy"); }, []);
+
+  // 화면이 바뀔 때 모바일 확대(핀치 줌) 상태를 원래대로
+  useEffect(() => { resetZoom(); }, [screen]);
 
   // 배경음악: 메인·랭킹 = 로비, 기준 라운드 1~6 = 전투, 7~10 = 보스 (기준 라운드마다 템포 상승), 게임오버 시 정지
   // 20라운드 주기: R11~20은 R1~10 곡을 역재생, R21~ 반복 (baseRound / isMirrorRound)
@@ -204,6 +208,7 @@ export default function App() {
   }
 
   function startGame(diff) {
+    resetZoom(); // 재도전처럼 같은 게임 화면에서 다시 시작할 때도 확대 해제
     clearFx();
     play("click");
     setDifficulty(diff);
