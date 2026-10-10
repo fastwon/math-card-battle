@@ -52,7 +52,7 @@ export default function ResultOverlay({
   preRank, preRankLoading, finalRank,
   nickname, onNicknameChange, submitting, submitError, nicknameSubmitted, registrationSkipped,
   shareMsg, onSubmit, onSkipRegistration, onShare, onNextRound, onRetry, onGoMain,
-  rewardOptions, passives, items, onPickReward, nextThresh,
+  rewardOptions, rewardPicks = { left: 1, total: 1 }, passives, items, onPickReward, nextThresh,
 }) {
   const registrationDecided = nicknameSubmitted || registrationSkipped;
   const total = score?.newTS ?? totalScore;
@@ -180,7 +180,11 @@ export default function ResultOverlay({
             </div>
             {rewardOptions.length > 0
               ? <>
-                  <div style={{ fontSize:14, fontWeight:"bold", color:"#fbbf24", marginBottom:8 }}>🎁 보상을 하나 고르세요</div>
+                  <div style={{ fontSize:14, fontWeight:"bold", color:"#fbbf24", marginBottom:8 }}>
+                    {rewardPicks.total > 1
+                      ? `🎁 마왕 처치 보상! 하나 고르세요 (${rewardPicks.total - rewardPicks.left + 1}/${rewardPicks.total})`
+                      : "🎁 보상을 하나 고르세요"}
+                  </div>
                   {rewardOptions.map(opt => <RewardCard key={opt.kind + opt.key} opt={opt} passives={passives} items={items} onPick={onPickReward} />)}
                 </>
               : <button onClick={onNextRound} style={{ padding:"10px 24px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7c3aed,#a855f7)", color:"#fff", fontSize:14, fontWeight:"bold", cursor:"pointer" }}>다음 라운드 →</button>

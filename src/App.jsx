@@ -52,6 +52,8 @@ export default function App() {
   const mods = modsFrom(passives, combos); // 실제 적용 효과 (패시브 + 조합)
   const [items, setItems] = useState(EMPTY_ITEMS);
   const [rewardOptions, setRewardOptions] = useState([]);
+  const [rewardPicks, setRewardPicks] = useState({ left: 1, total: 1 }); // 마왕 라운드 클리어는 2번 선택
+  const pendingBanners = useRef([]); // 결과창에 가려지지 않게, 다음 라운드 시작 때 띄울 배너
   const [itemMode, setItemMode] = useState(null); // { type:"pen", cardId? } | { type:"clone", targetId? }
 
   // 적의 공격 (R6~): 공격까지 남은 턴, 마왕 분노 여부, 공격 연출용 id
@@ -237,6 +239,7 @@ export default function App() {
     setRound(1); setEnemyMaxHp(enemyMaxHpFor(1)); setEnemyHp(enemyMaxHpFor(1));
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
     setPassives({}); setCombos({}); setItems(EMPTY_ITEMS); setRewardOptions([]); setItemMode(null);
+    setRewardPicks({ left: 1, total: 1 }); pendingBanners.current = [];
     setAtkTimer(attackInterval(1)); setEnraged(false);
     setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
@@ -321,7 +324,11 @@ export default function App() {
         setScore({ base, perfect, allIn, multiplier, finalScore: fs, turnCount: turn, maxD: newMax, thresh, newTS });
         setTotalScore(newTS);
         setRoundScores(newRS);
-        if (!isGO) setRewardOptions(rollRewardOptions(passives, items, combos));
+        if (!isGO) {
+          setRewardOptions(rollRewardOptions(passives, items, combos));
+          const total = isBossRound(round) ? 2 : 1; // 마왕 처치 보너스: 보상 2번
+          setRewardPicks({ left: total, total });
+        }
         setPhase("kill");
         setKillBanner(
           perfect && allIn ? { text: "⚡ COMBO ×4!", color: "#fbbf24" }
@@ -490,21 +497,34 @@ export default function App() {
     setPassives(res.passives);
     setCombos(res.combos);
     setItems(res.items);
-    setRewardOptions([]);
-    nextRound(modsFrom(res.passives, res.combos));
     play("levelUp");
     if (opt.kind === "combo") {
       const c = COMBOS[opt.key];
-      play("synth");
-      setKillBanner({ text: `✨ 조합 완성!`, sub: `${c.icon} ${c.name} — ${c.desc}`, color: "#fbbf24", long: true });
-      fxTimeout(() => setKillBanner(null), 2100);
+      pendingBanners.current.push({ text: `✨ 조합 완성!`, sub: `${c.icon} ${c.name} — ${c.desc}`, color: "#fbbf24", long: true });
     }
-    if (res.synthesized) {
-      play("synth");
-      setKillBanner({ text: "✨ 히든 합성!", sub: "🔄 ✏️ 🪞 → 💖 부활 획득", color: "#f472b6", long: true });
-      fxTimeout(() => setKillBanner(null), 2100);
+    if (res.synthesized) pendingBanners.current.push({ text: "✨ 히든 합성!", sub: "🔄 ✏️ 🪞 → 💖 부활 획득", color: "#f472b6", long: true });
+
+    // 남은 선택이 있으면(마왕 처치 보너스) 바뀐 상태로 선택지를 새로 뽑아 한 번 더
+    if (rewardPicks.left > 1) {
+      setRewardPicks(p => ({ ...p, left: p.left - 1 }));
+      setRewardOptions(rollRewardOptions(res.passives, res.items, res.combos));
+      return;
     }
-    bossIntro(round + 1, res.synthesized ? 2200 : 300);
+    setRewardOptions([]);
+    nextRound(modsFrom(res.passives, res.combos));
+    showPendingThenBoss(round + 1);
+  }
+
+  // 모아 둔 배너(합성·조합)를 차례로 띄운 뒤 마왕 등장 연출
+  function showPendingThenBoss(nextR) {
+    const queue = pendingBanners.current;
+    pendingBanners.current = [];
+    queue.forEach((banner, i) => fxTimeout(() => {
+      play("synth");
+      setKillBanner(banner);
+      fxTimeout(() => setKillBanner(null), 2100);
+    }, 300 + i * 2200));
+    bossIntro(nextR, 300 + queue.length * 2200);
   }
 
   // 부활: 부활 1개를 쓰고 같은 라운드를 처음부터 (실패한 시도의 점수는 버림)
@@ -610,8 +630,8 @@ export default function App() {
           onSubmit={submitScore}
           onSkipRegistration={()=>setRegistrationSkipped(true)}
           onShare={shareResult}
-          onNextRound={()=>{ nextRound(); bossIntro(round + 1, 300); }}
-          rewardOptions={rewardOptions} passives={passives} items={items} onPickReward={pickReward}
+          onNextRound={()=>{ nextRound(); showPendingThenBoss(round + 1); }}
+          rewardOptions={rewardOptions} rewardPicks={rewardPicks} passives={passives} items={items} onPickReward={pickReward}
           nextThresh={thresholdFor(difficulty, round + 1, mods.relax)}
           onRetry={()=>startGame(difficulty)}
           onGoMain={goMain}
