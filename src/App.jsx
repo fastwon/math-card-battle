@@ -471,7 +471,7 @@ export default function App() {
     if (!isBossRound(r)) return;
     fxTimeout(() => {
       play("bossAppear");
-      setKillBanner({ text: "👿 마왕 강림", sub: `${attackInterval(r)}턴마다 카드 파괴 + 봉인 · HP 절반 이하에서 분노`, color: "#a855f7", long: true });
+      setKillBanner({ text: "👿 마왕 강림", sub: `${attackInterval(r)}턴마다 카드 파괴 + 봉인`, color: "#a855f7", long: true });
       fxTimeout(() => setKillBanner(null), 2100);
     }, delay);
   }
