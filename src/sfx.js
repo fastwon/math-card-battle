@@ -160,6 +160,11 @@ const SOUNDS = {
     noise({ dur: 0.6, vol: 0.3, filter: 2000, to: 200 });
   },
 
+  heal: () => {
+    arpeggio([523, 659, 784, 1047, 1319], { step: 0.06, dur: 0.35, type: "sine", vol: 0.3 });
+    noise({ dur: 0.5, vol: 0.08, filter: 9000, to: 4000, delay: 0.1 });
+  },
+
   roundClear: () => arpeggio([523, 659, 784, 1047], { step: 0.1, dur: 0.3, type: "triangle", vol: 0.3 }),
   gameOver:   () => arpeggio([392, 330, 262, 196], { step: 0.22, dur: 0.4, type: "sawtooth", vol: 0.18 }),
 };

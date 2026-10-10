@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { play } from "./sfx";
 import { playBgm } from "./bgm";
 import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
-  enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, SEAL_TURNS, getEnemy } from "./game/rules";
+  enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, SEAL_TURNS, getEnemy,
+  breakCount, enemyHeals, HEAL_RATIO } from "./game/rules";
 import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
@@ -61,6 +62,7 @@ export default function App() {
   const [enraged, setEnraged] = useState(false);
   const [enemyAtkId, setEnemyAtkId] = useState(0);
   const [atkBlocked, setAtkBlocked] = useState(false); // 방패로 막은 공격이면 내 캐릭터가 움찔하지 않음
+  const [healId, setHealId] = useState(0); // 적 회복 연출
 
   // 히든 (라운드당 1회): 숫자 수집가 = 한 라운드에 1~9를 모두 공격에 사용, 사칙연산 마스터 = 손패에 + − × ÷ 동시 보유
   const [digitsUsed, setDigitsUsed] = useState([]);
@@ -269,6 +271,7 @@ export default function App() {
   function endTurn(skip = false) {
     let newHand = hand;
     let rageNow = false;
+    let hpNow = enemyHp; // 이번 턴 공격 후 적 HP (적 회복 계산용)
     if (!skip) {
       if (!exprValue || exprValue <= 0) return;
       const dmg = exprValue;
@@ -297,6 +300,7 @@ export default function App() {
         setLog(prev => [`🔢 숫자 수집가! 추가 피해 ${bonus}`, ...prev.slice(0,4)]);
       }
       setEnemyHp(newHp);
+      hpNow = newHp;
 
       if (newHp <= 0) {
         // 퍼펙트 = 마지막 공격이 남은 HP와 정확히 같음 (추가 피해가 없으면 '총 데미지 = 최대 HP'와 동일)
@@ -391,14 +395,20 @@ export default function App() {
       let timer = atkTimer - 1;
       if (timer <= 0) {
         timer = attackInterval(round);
-        attack = { victim: null, index: -1, sealed: [], blocked: items.shield > 0 };
+        attack = { victims: [], sealed: [], blocked: items.shield > 0, heal: 0 };
         if (attack.blocked) {
           setItems(i => ({ ...i, shield: i.shield - 1 }));
         } else if (newHand.length) {
-          const i = Math.floor(Math.random() * newHand.length);
-          attack.victim = newHand[i]; attack.index = i;
-          newHand = newHand.filter((_, k) => k !== i);
+          // 무작위로 n장 파괴 (R26부터 2장). 원래 위치를 기억해 깨지는 연출에 사용
+          const pool = newHand.map((_, k) => k);
+          const picked = [];
+          for (let k = Math.min(breakCount(round), newHand.length); k > 0; k--) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+          picked.sort((x, y) => x - y);
+          attack.victims = picked.map(i => ({ card: newHand[i], index: i }));
+          newHand = newHand.filter((_, k) => !picked.includes(k));
         }
+        // R36부터: 공격할 때마다 최대 HP의 5% 회복 (방패는 카드 공격만 막음)
+        if (enemyHeals(round)) attack.heal = Math.min(enemyMaxHp - hpNow, Math.ceil(enemyMaxHp * HEAL_RATIO));
         if (isBossRound(round) && !attack.blocked) {
           const n = Math.min(isRaging ? BOSS_RAGE_SEAL_COUNT : BOSS_SEAL_COUNT, newHand.length);
           const pool = newHand.map((_, k) => k);
@@ -429,16 +439,28 @@ export default function App() {
     setAtkBlocked(attack.blocked);
     setPhase("enemy");
     fxTimeout(() => play("enemyAttack"), 250); // CSS 연출(0.25초 뒤 돌진)과 맞춤
-    if (attack.victim) {
+    if (attack.victims.length) {
       const shown = [...drawn];
-      shown.splice(attack.index, 0, { ...attack.victim, breaking: true });
+      for (const v of attack.victims) shown.splice(v.index, 0, { ...v.card, breaking: true }); // 원래 자리에 깨지는 카드
       setHand(shown);
       fxTimeout(() => play("cardBreak"), 450);
       fxTimeout(() => setHand(h => h.filter(c => !c.breaking)), 950);
     } else setHand(drawn);
     if (attack.sealed.length) fxTimeout(() => play("seal"), 650);
+    if (attack.heal > 0) {
+      const heal = attack.heal;
+      fxTimeout(() => {
+        setEnemyHp(h => Math.min(enemyMaxHp, h + heal));
+        setHealId(n => n + 1);
+        const popId = Date.now() + Math.random();
+        setDmgPops(prev => [...prev, { id: popId, dmg: heal, ratio: 0, heal: true }]);
+        fxTimeout(() => setDmgPops(prev => prev.filter(p => p.id !== popId)), 1000);
+        play("heal");
+      }, 550);
+      fxTimeout(() => setLog(prev => [`💚 ${enemyName} 체력 회복 +${heal}`, ...prev.slice(0,4)]), 550);
+    }
     const parts = [];
-    if (attack.victim) parts.push(`카드 ${attack.victim.value} 파괴`);
+    if (attack.victims.length) parts.push(`카드 ${attack.victims.map(v => v.card.value).join(", ")} 파괴`);
     if (attack.sealed.length) parts.push(`${attack.sealed.map(c => c.value).join(", ")} 봉인`);
     const icon = isBossRound(round) ? "👿" : "👹";
     if (attack.blocked) {
@@ -607,7 +629,7 @@ export default function App() {
     <GameScreen
       difficulty={difficulty} round={round} turn={turn} hand={hand} selected={selected} phase={phase} log={log}
       enemyHp={enemyHp} enemyMaxHp={enemyMaxHp} roundScores={roundScores} totalScore={totalScore}
-      fx={{ hitId, dmgPops, screenShake, flashId, killBanner }}
+      fx={{ hitId, dmgPops, screenShake, flashId, killBanner, healId }}
       limit={turnLimit(round, mods.timeExt)} handMax={maxHandSize(round, mods)}
       thresh={thresholdFor(difficulty, round, mods.relax)}
       enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy", blocked: atkBlocked }}

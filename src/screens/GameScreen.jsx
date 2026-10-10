@@ -21,7 +21,7 @@ export default function GameScreen({
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
   const [infoKey, setInfoKey] = useState(null); // 설명을 열어 둔 아이템
-  const { hitId, dmgPops, screenShake, flashId, killBanner } = fx;
+  const { hitId, dmgPops, screenShake, flashId, killBanner, healId = 0 } = fx;
 
   const diff = DIFFICULTIES[difficulty];
   const enemy = getEnemy(round);
@@ -126,9 +126,11 @@ export default function GameScreen({
           <div style={{ height:110, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
             <div key={`${round}-${hitId}`} className={enemyHp<=0 ? "enemy-dying" : hitId>0 ? "enemy-hit" : ""}>
               <div key={`atk-${enemyAtk.id}`} className={enemyAtk.attacking ? "enemy-attack" : ""}>
+                <div key={`heal-${healId}`} className={healId > 0 && enemyHp > 0 ? "enemy-heal" : ""}>
                 <div className={enemyHp>0 ? "bob" : ""} style={{ animationDelay:"-1.2s" }}>
                   {/* R11~20 (20라운드 주기의 뒤 10라운드): 적 색 반전 */}
                   <img src={enemy.img} alt={enemy.name} style={{ height:110, maxWidth:"100%", objectFit:"contain", display:"block", filter: isMirrorRound(round) ? "invert(1)" : "none" }} />
+                </div>
                 </div>
               </div>
             </div>
@@ -137,10 +139,10 @@ export default function GameScreen({
             <div key={p.id} className="dmg-pop" style={{
               position:"absolute", top:24, left:"50%", pointerEvents:"none", whiteSpace:"nowrap", zIndex:2,
               fontSize: 24 + Math.min(p.ratio, 1) * 26, fontWeight:900,
-              color: p.bonus ? "#c084fc" : p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
+              color: p.heal ? "#4ade80" : p.bonus ? "#c084fc" : p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
               textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
             }}>
-              {p.bonus ? "🔢" : p.ratio>=0.5 && "💥"}-{p.dmg}
+              {p.heal ? `💚+${p.dmg}` : <>{p.bonus ? "🔢" : p.ratio>=0.5 && "💥"}-{p.dmg}</>}
             </div>
           ))}
           <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
