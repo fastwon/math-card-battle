@@ -400,7 +400,7 @@ export default function App() {
 
   // r 라운드를 처음 상태로 (다음 라운드 진입, 부활 재도전 공용). pv = 적용할 패시브
   function restartRound(r, pv) {
-    const mhp = enemyMaxHpFor(r);
+    const mhp = enemyMaxHpFor(r, difficulty);
     setEnemyMaxHp(mhp); setEnemyHp(mhp);
     setHand(genHand(r, pv)); setSelected([]); setTurn(1); setLog([]);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setItemMode(null); setPhase("play");

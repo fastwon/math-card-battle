@@ -3,9 +3,10 @@
 export const OPS = ["+", "-", "×", "÷"];
 
 export const DIFFICULTIES = {
-  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 3 },
-  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 5 },
-  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r * 2 },
+  // hpGrowth: 라운드마다 적 HP가 몇 배씩 늘어나는지
+  easy:   { label: "이지",   emoji: "🌱", color: "#16a34a", threshold: r => r * 3,     hpGrowth: 1.3 },
+  normal: { label: "노말",   emoji: "⚔️", color: "#d97706", threshold: r => r * 5,     hpGrowth: 1.4 },
+  hard:   { label: "하드",   emoji: "💀", color: "#dc2626", threshold: r => r * r * 2, hpGrowth: 1.5 },
 };
 
 function randInt(min, max) {
@@ -137,9 +138,9 @@ export function parseExpression(selected) {
   } catch { return null; }
 }
 
-// 라운드별 적 최대 HP
-export function enemyMaxHpFor(round) {
-  return Math.floor(50 * Math.pow(1.5, round - 1));
+// 라운드별 적 최대 HP: 50 × (난이도별 증가율)^(라운드-1)
+export function enemyMaxHpFor(round, difficulty = "hard") {
+  return Math.floor(50 * Math.pow(DIFFICULTIES[difficulty]?.hpGrowth ?? 1.5, round - 1));
 }
 // 라운드별 최대 턴 수 (초과 시 게임오버). extra = 시간 연장 패시브 레벨
 export function turnLimit(round, extra = 0) {

@@ -146,7 +146,7 @@ export default function ResultOverlay({
         {phase==="result" && (
           <>
             <div style={{ fontSize:11, color:"#6b7280", marginBottom:12 }}>
-              다음 기준: {nextThresh}점 · 적 HP: {enemyMaxHpFor(round+1)}
+              다음 기준: {nextThresh}점 · 적 HP: {enemyMaxHpFor(round+1, difficulty)}
             </div>
             {rewardOptions.length > 0
               ? <>
