@@ -20,7 +20,10 @@ export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpe
 
       {/* 상단 바: 규칙 / 음소거 */}
       <div style={{ width:"100%", maxWidth:340, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <button onClick={()=>setShowRules(true)} style={{ height:28, padding:"0 12px", borderRadius:10, border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:12, fontWeight:"bold", cursor:"pointer" }}>📖 게임 규칙</button>
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={()=>setShowRules(true)} style={{ height:28, padding:"0 12px", borderRadius:10, border:"1px solid rgba(192,132,252,0.5)", background:"rgba(192,132,252,0.15)", color:"#c084fc", fontSize:12, fontWeight:"bold", cursor:"pointer", whiteSpace:"nowrap" }}>📖 게임 규칙</button>
+          <button onClick={()=>setShowSeason(true)} style={{ height:28, padding:"0 10px", borderRadius:10, border:"1px solid rgba(251,191,36,0.5)", background:"rgba(251,191,36,0.12)", color:"#fbbf24", fontSize:12, fontWeight:"bold", cursor:"pointer", whiteSpace:"nowrap" }}>📢 시즌 {CURRENT_SEASON}</button>
+        </div>
         <SoundButtons />
       </div>
 

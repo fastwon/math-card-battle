@@ -30,8 +30,9 @@ export default function SeasonNotice({ onClose, onOpenRankings }) {
   const hasChamps = champs && champs.some(Boolean);
 
   return (
-    <div onClick={() => close()} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
-      <div className="overlay-pop" onClick={e=>e.stopPropagation()} style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"22px 20px", border:"2px solid rgba(251,191,36,0.5)", boxShadow:"0 0 40px rgba(251,191,36,0.25)", maxWidth:360, width:"100%", maxHeight:"85vh", overflowY:"auto", color:"#fff", textAlign:"center" }}>
+    // 바깥을 눌러도 닫히지 않음: 실수로 닫혀 못 읽는 일 방지 (아래 버튼으로만 닫기)
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
+      <div className="overlay-pop" style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:20, padding:"22px 20px", border:"2px solid rgba(251,191,36,0.5)", boxShadow:"0 0 40px rgba(251,191,36,0.25)", maxWidth:360, width:"100%", maxHeight:"85vh", overflowY:"auto", color:"#fff", textAlign:"center" }}>
         <div style={{ fontSize:36, marginBottom:4 }}>🎉</div>
         <div className="title-shine" style={{
           fontSize:24, fontWeight:900, marginBottom:6,
