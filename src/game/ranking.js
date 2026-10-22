@@ -24,6 +24,13 @@ export async function fetchPreRank(score, difficulty, round) {
   return (count ?? 0) + 1;
 }
 
-export function insertRanking({ nickname, score, difficulty, round }) {
-  return supabase.from("rankings").insert([{ nickname, score, difficulty, round }]);
+// loadout: 게임오버 시점의 조합·패시브 키를 쉼표로 이은 문자열 (예: "goldenHand,hourglass,opSense")
+export async function insertRanking({ nickname, score, difficulty, round, loadout }) {
+  const row = { nickname, score, difficulty, round };
+  const res = await supabase.from("rankings").insert([loadout ? { ...row, loadout } : row]);
+  // DB에 loadout 칸이 아직 없을 때를 대비: 아이콘 정보만 빼고 다시 등록
+  if (res.error && loadout && /loadout/i.test(res.error.message || "")) {
+    return supabase.from("rankings").insert([row]);
+  }
+  return res;
 }

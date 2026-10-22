@@ -164,7 +164,8 @@ export default function App() {
     setSubmitting(true);
     setSubmitError(null);
     const finalScore = roundScore(currentTotalScore);
-    const { error: insertError } = await insertRanking({ nickname: nickname.trim(), score: finalScore, difficulty, round });
+    const loadout = [...Object.keys(combos).filter(k => combos[k]), ...Object.keys(passives).filter(k => passives[k] > 0)].join(",");
+    const { error: insertError } = await insertRanking({ nickname: nickname.trim(), score: finalScore, difficulty, round, loadout });
     if (insertError) {
       setSubmitError("등록에 실패했습니다. 다시 시도해주세요.");
       setSubmitting(false);
