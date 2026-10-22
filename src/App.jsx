@@ -5,7 +5,7 @@ import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseE
   enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, SEAL_TURNS, getEnemy,
   breakCount, enemyHeals, HEAL_RATIO } from "./game/rules";
 import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX, ironWallChance, counterRatio } from "./game/rewards";
-import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
+import { fetchRankings, fetchPreRank, insertRanking, roundScore, CURRENT_SEASON } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
 import { resetZoom } from "./utils/viewport";
 import MainScreen from "./screens/MainScreen";
@@ -22,6 +22,7 @@ export default function App() {
   const [top10Tab, setTop10Tab] = useState("easy");
   const [allRankings, setAllRankings] = useState([]);
   const [rankingsTab, setRankingsTab] = useState("easy");
+  const [rankingsSeason, setRankingsSeason] = useState(CURRENT_SEASON);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [rankingsError, setRankingsError] = useState(null);
@@ -131,24 +132,31 @@ export default function App() {
     setPreRankLoading(false);
   }
 
-  function openRankings() {
+  function openRankings(season = CURRENT_SEASON) {
     setScreen("rankings");
     setSearchQuery("");
     setRankingsError(null);
     setRankingsTab("easy");
-    fetchRankingList("", "easy");
+    setRankingsSeason(season);
+    fetchRankingList("", "easy", season);
   }
 
   function handleRankingsTab(tab) {
     setRankingsTab(tab);
     setSearchQuery("");
-    fetchRankingList("", tab);
+    fetchRankingList("", tab, rankingsSeason);
   }
 
-  async function fetchRankingList(query, tab) {
+  function handleRankingsSeason(season) {
+    setRankingsSeason(season);
+    setSearchQuery("");
+    fetchRankingList("", rankingsTab, season);
+  }
+
+  async function fetchRankingList(query, tab, season) {
     setSearchLoading(true);
     setRankingsError(null);
-    const { data, error } = await fetchRankings(tab, 100, query);
+    const { data, error } = await fetchRankings(tab, 100, query, season);
     if (error) setRankingsError("랭킹을 불러오지 못했습니다. 다시 시도해주세요.");
     if (data) setAllRankings(data);
     setSearchLoading(false);
@@ -157,7 +165,7 @@ export default function App() {
   function handleSearch(query) {
     setSearchQuery(query);
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => fetchRankingList(query, rankingsTab), 300);
+    searchDebounceRef.current = setTimeout(() => fetchRankingList(query, rankingsTab, rankingsSeason), 300);
   }
 
   async function submitScore(currentTotalScore) {
@@ -647,6 +655,7 @@ export default function App() {
     return (
       <RankingScreen
         tab={rankingsTab} onTab={handleRankingsTab}
+        season={rankingsSeason} onSeason={handleRankingsSeason}
         query={searchQuery} onSearch={handleSearch}
         rankings={allRankings} loading={searchLoading} error={rankingsError}
         onBack={()=>setScreen("select")}

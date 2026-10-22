@@ -6,9 +6,12 @@ import SoundButtons from "../components/SoundButtons";
 import DiffTabs from "../components/DiffTabs";
 import RankRow from "../components/RankRow";
 import RulesPopup from "../components/RulesPopup";
+import SeasonNotice, { shouldShowSeasonNotice } from "../components/SeasonNotice";
+import { CURRENT_SEASON } from "../game/ranking";
 
 export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpenRankings }) {
   const [showRules, setShowRules] = useState(false);
+  const [showSeason, setShowSeason] = useState(shouldShowSeasonNotice);
 
   return (
     <div style={{ position:"relative", minHeight:"100vh", background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", fontFamily:"'Segoe UI',sans-serif", color:"#fff", overflowX:"hidden" }}>
@@ -64,7 +67,7 @@ export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpe
 
       {/* TOP 10 */}
       <div style={{ marginTop:20, width:"100%", maxWidth:340, background:"rgba(0,0,0,0.3)", borderRadius:14, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.1)" }}>
-        <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 TOP 10</div>
+        <div style={{ color:"#fbbf24", fontWeight:"bold", marginBottom:10, fontSize:14 }}>🏅 시즌 {CURRENT_SEASON} TOP 10</div>
         <DiffTabs active={top10Tab} onChange={onTop10Tab} />
         <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
           {top10.length > 0
@@ -72,7 +75,7 @@ export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpe
             : <div style={{ color:"#6b7280", fontSize:12, textAlign:"center", padding:"12px 0" }}>아직 기록이 없습니다</div>
           }
         </div>
-        <button onClick={onOpenRankings} style={{
+        <button onClick={()=>onOpenRankings()} style={{
           marginTop:12, width:"100%", padding:"8px 0", borderRadius:10,
           border:"1px solid rgba(192,132,252,0.4)", background:"rgba(192,132,252,0.1)",
           color:"#c084fc", fontSize:13, fontWeight:"bold", cursor:"pointer",
@@ -82,6 +85,7 @@ export default function MainScreen({ top10, top10Tab, onTop10Tab, onStart, onOpe
       </div>
 
       {showRules && <RulesPopup onClose={()=>setShowRules(false)} />}
+      {showSeason && <SeasonNotice onClose={()=>setShowSeason(false)} onOpenRankings={onOpenRankings} />}
     </div>
   );
 }
