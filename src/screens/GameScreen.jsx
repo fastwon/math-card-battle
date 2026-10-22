@@ -16,7 +16,7 @@ export default function GameScreen({
   difficulty, round, turn, hand, selected, phase, log,
   enemyHp, enemyMaxHp, roundScores, totalScore,
   fx, exprDisplay, exprValue,
-  limit, handMax, thresh, enemyAtk, passives, combos, items, itemMode,
+  limit, handMax, thresh, enemyAtk, passives, combos, items, itemMode, foreseen = [],
   onToggleCard, onAttack, onSkip, onQuit, onUseItem, onCancelItem, children,
 }) {
   const [showScoreDetail, setShowScoreDetail] = useState(false);
@@ -139,10 +139,10 @@ export default function GameScreen({
             <div key={p.id} className="dmg-pop" style={{
               position:"absolute", top:24, left:"50%", pointerEvents:"none", whiteSpace:"nowrap", zIndex:2,
               fontSize: 24 + Math.min(p.ratio, 1) * 26, fontWeight:900,
-              color: p.heal ? "#4ade80" : p.bonus ? "#c084fc" : p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
+              color: p.heal ? "#4ade80" : p.counter ? "#f97316" : p.bonus ? "#c084fc" : p.ratio>=0.5 ? "#fbbf24" : p.ratio>=0.25 ? "#fb923c" : "#fff",
               textShadow:"0 0 10px rgba(239,68,68,0.9), 0 3px 0 #000",
             }}>
-              {p.heal ? `💚+${p.dmg}` : <>{p.bonus ? "🔢" : p.ratio>=0.5 && "💥"}-{p.dmg}</>}
+              {p.heal ? `💚+${p.dmg}` : <>{p.counter ? "🗡️" : p.bonus ? "🔢" : p.ratio>=0.5 && "💥"}-{p.dmg}</>}
             </div>
           ))}
           <div style={{ fontSize:13, fontWeight:"bold", margin:"4px 0 5px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{enemy.name} <span style={{ color:"#a78bfa", fontSize:11 }}>Lv.{round}</span></div>
@@ -175,7 +175,7 @@ export default function GameScreen({
           const isItemTarget = itemMode && itemMode.targetId === card.id;
           const notAllowed = card.locked || (itemMode?.type === "pen" && !canUpgradeNumber(card)); // 봉인, 마법 펜(연산·9)
           return (
-            <div key={card.id} onClick={()=>onToggleCard(card)} className={card.breaking ? "card-break" : card.locked ? "card-in card-seal" : "card-in"} style={{
+            <div key={card.id} onClick={()=>onToggleCard(card)} className={card.breaking ? "card-break" : card.saved ? "card-in card-saved" : card.locked ? "card-in card-seal" : "card-in"} style={{
               position:"relative", filter: card.locked ? "grayscale(0.8)" : "none",
               animationDelay: turn===1 ? `${i*60}ms` : "0ms",
               width:50, height:70, borderRadius:10, display:"flex", flexDirection:"column",
@@ -183,7 +183,7 @@ export default function GameScreen({
               opacity: notAllowed ? 0.35 : 1,
               fontSize: isOp?20:24,
               background: isSel ? (isOp?"linear-gradient(135deg,#7c3aed,#a855f7)":"linear-gradient(135deg,#1d4ed8,#3b82f6)") : (isOp?"linear-gradient(135deg,#4c1d95,#6d28d9)":"linear-gradient(135deg,#1e3a8a,#1d4ed8)"),
-              border: isItemTarget ? "2px solid #f472b6" : itemMode && !notAllowed ? "2px dashed #fbbf24" : isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
+              border: isItemTarget ? "2px solid #f472b6" : itemMode && !notAllowed ? "2px dashed #fbbf24" : foreseen.includes(card.id) ? "2px dashed #f87171" : isSel?"2px solid #f9fafb":"2px solid rgba(255,255,255,0.2)",
               boxShadow: isItemTarget ? "0 0 14px rgba(244,114,182,0.8)" : isSel?"0 0 12px rgba(255,255,255,0.4)":"0 2px 6px rgba(0,0,0,0.4)",
               transform: isSel||isItemTarget?"translateY(-8px) scale(1.05)":"none",
               transition:"all 0.2s", userSelect:"none", color:"#fff",
@@ -191,6 +191,8 @@ export default function GameScreen({
               <div>{card.value}</div>
               <div style={{ fontSize:9, marginTop:2, opacity:0.7 }}>{isOp?"연산":"숫자"}</div>
               {card.locked && <div style={{ position:"absolute", top:-8, right:-6, fontSize:16, filter:"drop-shadow(0 1px 2px #000)" }}>🔒</div>}
+              {foreseen.includes(card.id) && !card.breaking && <div className="warn-blink" style={{ position:"absolute", top:-8, left:-6, fontSize:15, filter:"drop-shadow(0 1px 2px #000)" }}>⚠️</div>}
+              {card.saved && <div style={{ position:"absolute", top:-8, right:-6, fontSize:16, filter:"drop-shadow(0 1px 2px #000)" }}>🧱</div>}
             </div>
           );
         })}

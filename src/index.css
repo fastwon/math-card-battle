@@ -131,6 +131,15 @@ html, body {
 .warn-blink   { animation: warnBlink 0.8s ease-in-out infinite; }
 .rage-border  { animation: ragePulse 1.4s ease-in-out infinite; }
 
+/* ── 철벽: 깨질 뻔한 카드가 버팀 ── */
+@keyframes cardSaved {
+  0%   { transform: none; box-shadow: none; }
+  20%  { transform: translateX(-4px) rotate(-3deg); }
+  40%  { transform: translateX(4px) rotate(3deg); box-shadow: 0 0 18px rgba(148,163,184,1); }
+  100% { transform: none; box-shadow: 0 0 6px rgba(148,163,184,0.5); }
+}
+.card-saved { animation: cardSaved 0.6s ease-out 0.25s; }
+
 /* ── 적 회복 ── */
 @keyframes enemyHeal {
   0%   { filter: none; transform: none; }
@@ -167,7 +176,7 @@ html, body {
   .dmg-pop, .enemy-hit, .enemy-dying, .screen-shake, .hit-flash,
   .card-in, .kill-banner, .banner-long, .overlay-pop, .ready-pulse,
   .bg-card, .title-shine, .bob, .result-pop, .player-lunge, .player-win,
-  .enemy-attack, .player-hurt, .card-break, .card-seal, .warn-blink, .rage-border, .enemy-heal {
+  .enemy-attack, .player-hurt, .card-break, .card-seal, .warn-blink, .rage-border, .enemy-heal, .card-saved {
     animation-duration: 0.01ms !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;

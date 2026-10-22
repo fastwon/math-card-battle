@@ -4,7 +4,7 @@ import { playBgm } from "./bgm";
 import { DIFFICULTIES, makeCard, maxHandSize, genHand, addCard, drawHand, parseExpression, enemyMaxHpFor, turnLimit, thresholdFor, canUpgradeNumber, upgradeNumber, baseRound, isMirrorRound,
   enemyAttacks, isBossRound, attackInterval, BOSS_SEAL_COUNT, BOSS_RAGE_SEAL_COUNT, SEAL_TURNS, getEnemy,
   breakCount, enemyHeals, HEAL_RATIO } from "./game/rules";
-import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX } from "./game/rewards";
+import { rollRewardOptions, applyReward, modsFrom, COMBOS, EMPTY_ITEMS, SHIELD_MAX, ironWallChance, counterRatio } from "./game/rewards";
 import { fetchRankings, fetchPreRank, insertRanking, roundScore } from "./game/ranking";
 import { shareOrCopy } from "./utils/share";
 import { resetZoom } from "./utils/viewport";
@@ -63,6 +63,7 @@ export default function App() {
   const [enemyAtkId, setEnemyAtkId] = useState(0);
   const [atkBlocked, setAtkBlocked] = useState(false); // 방패로 막은 공격이면 내 캐릭터가 움찔하지 않음
   const [healId, setHealId] = useState(0); // 적 회복 연출
+  const [foreseen, setForeseen] = useState([]); // 조합 '예지': 다음 공격에 부서질 카드 id
 
   // 히든 (라운드당 1회): 숫자 수집가 = 한 라운드에 1~9를 모두 공격에 사용, 사칙연산 마스터 = 손패에 + − × ÷ 동시 보유
   const [digitsUsed, setDigitsUsed] = useState([]);
@@ -243,7 +244,7 @@ export default function App() {
     setHand(genHand(1)); setSelected([]); setTurn(1); setLog([]);
     setPassives({}); setCombos({}); setItems(EMPTY_ITEMS); setRewardOptions([]); setItemMode(null);
     setRewardPicks({ left: 1, total: 1 }); pendingBanners.current = [];
-    setAtkTimer(attackInterval(1)); setEnraged(false);
+    setAtkTimer(attackInterval(1)); setEnraged(false); setForeseen([]);
     setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null);
     setTotalScore(0); setRoundScores([]); setFinalRank(null); setPhase("play");
@@ -395,19 +396,28 @@ export default function App() {
     if (enemyAttacks(round)) {
       let timer = atkTimer - 1;
       if (timer <= 0) {
-        timer = attackInterval(round);
-        attack = { victims: [], sealed: [], blocked: items.shield > 0, heal: 0 };
+        timer = attackInterval(round) + (mods.atkDelay || 0);
+        attack = { victims: [], sealed: [], blocked: items.shield > 0, heal: 0, saved: null, counter: 0 };
         if (attack.blocked) {
           setItems(i => ({ ...i, shield: i.shield - 1 }));
         } else if (newHand.length) {
           // 무작위로 n장 파괴 (R26부터 2장). 원래 위치를 기억해 깨지는 연출에 사용
-          const pool = newHand.map((_, k) => k);
-          const picked = [];
-          for (let k = Math.min(breakCount(round), newHand.length); k > 0; k--) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+          const want = Math.min(breakCount(round), newHand.length);
+          // 예지로 미리 표시한 카드가 아직 손패에 있으면 그 카드부터, 모자라면 무작위
+          const picked = newHand.map((c, k) => foreseen.includes(c.id) ? k : -1).filter(k => k >= 0).slice(0, want);
+          const pool = newHand.map((_, k) => k).filter(k => !picked.includes(k));
+          while (picked.length < want) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+          // 철벽: 확률로 그중 1장을 지킴
+          if (picked.length && Math.random() < ironWallChance(mods.ironWall)) {
+            const keep = picked.splice(Math.floor(Math.random() * picked.length), 1)[0];
+            attack.saved = newHand[keep];
+          }
           picked.sort((x, y) => x - y);
           attack.victims = picked.map(i => ({ card: newHand[i], index: i }));
           newHand = newHand.filter((_, k) => !picked.includes(k));
         }
+        // 반격: 적의 현재 HP 비율 피해 (방패로 막아도 발동, 처치는 불가)
+        if (mods.counter) attack.counter = Math.max(0, Math.min(hpNow - 1, Math.floor(hpNow * counterRatio(mods.counter))));
         // R36부터: 공격할 때마다 최대 HP의 5% 회복 (방패는 카드 공격만 막음)
         if (enemyHeals(round)) attack.heal = Math.min(enemyMaxHp - hpNow, Math.ceil(enemyMaxHp * HEAL_RATIO));
         if (isBossRound(round) && !attack.blocked) {
@@ -420,6 +430,7 @@ export default function App() {
         }
       }
       setAtkTimer(timer);
+      if (attack) setForeseen([]);
     }
 
     // 6번째 턴: 연산카드 4장 미만이고 ×가 없으면 × 지급
@@ -431,6 +442,14 @@ export default function App() {
     }
     if (newHand.length < maxHandSize(round, mods)) fxTimeout(() => play("draw"), attack ? 700 : skip ? 0 : 250);
     setTurn(nextTurn);
+
+    // 조합 '예지': 공격까지 2턴 남으면 부서질 카드를 미리 정해 표시
+    if (mods.preview && enemyAttacks(round) && !attack && atkTimer - 1 === 2 && drawn.length) {
+      const pool = drawn.map(c => c.id);
+      const ids = [];
+      for (let k = Math.min(breakCount(round), pool.length); k > 0; k--) ids.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+      setForeseen(ids);
+    }
 
     if (!attack) { setHand(drawn); return; }
 
@@ -447,6 +466,24 @@ export default function App() {
       fxTimeout(() => play("cardBreak"), 450);
       fxTimeout(() => setHand(h => h.filter(c => !c.breaking)), 950);
     } else setHand(drawn);
+    if (attack.saved) {
+      const savedId = attack.saved.id;
+      setHand(h => h.map(c => c.id === savedId ? { ...c, saved: true } : c));
+      fxTimeout(() => play("seal"), 500);
+      fxTimeout(() => setHand(h => h.map(c => c.id === savedId ? { ...c, saved: false } : c)), 1100);
+      fxTimeout(() => setLog(prev => [`🧱 철벽! 카드 ${attack.saved.value}을(를) 지켰다`, ...prev.slice(0,4)]), 500);
+    }
+    if (attack.counter > 0) {
+      const dmg = attack.counter;
+      fxTimeout(() => {
+        setEnemyHp(h => Math.max(1, h - dmg));
+        const popId = Date.now() + Math.random();
+        setDmgPops(prev => [...prev, { id: popId, dmg, ratio: 0, counter: true }]);
+        fxTimeout(() => setDmgPops(prev => prev.filter(p => p.id !== popId)), 1000);
+        play("hit", 0.2);
+        setLog(prev => [`🗡️ 반격! ${getEnemy(round).name}에게 ${dmg} 피해`, ...prev.slice(0,4)]);
+      }, 420);
+    }
     if (attack.sealed.length) fxTimeout(() => play("seal"), 650);
     if (attack.heal > 0) {
       const heal = attack.heal;
@@ -467,7 +504,7 @@ export default function App() {
     if (attack.blocked) {
       fxTimeout(() => play("seal"), 450);
       setLog(prev => [`🛡️ 방패로 ${enemyName}의 공격을 막았다!`, ...prev.slice(0,4)]);
-    } else setLog(prev => [`${icon} ${enemyName}의 공격! ${parts.length ? parts.join(" · ") : "(부술 카드가 없다)"}`, ...prev.slice(0,4)]);
+    } else setLog(prev => [`${icon} ${enemyName}의 공격!${parts.length ? " " + parts.join(" · ") : attack.saved ? "" : " (부술 카드가 없다)"}`, ...prev.slice(0,4)]); // 철벽으로 막았으면 아래 철벽 기록이 설명
     fxTimeout(() => setPhase(p => p === "enemy" ? "play" : p), 950);
   }
 
@@ -492,7 +529,7 @@ export default function App() {
     setEnemyMaxHp(mhp); setEnemyHp(mhp);
     setHand(genHand(r, pv)); setSelected([]); setTurn(1); setLog([]);
     setMaxDmg(0); setTotalDmgDealt(0); setScore(null); setItemMode(null); setPhase("play");
-    setAtkTimer(attackInterval(r)); setEnraged(false);
+    setAtkTimer(attackInterval(r) + (pv.atkDelay || 0)); setEnraged(false); setForeseen([]);
     setDigitsUsed([]); setDigitsHiddenDone(false); setOpsHiddenDone(false);
   }
 
@@ -634,7 +671,7 @@ export default function App() {
       limit={turnLimit(round, mods.timeExt)} handMax={maxHandSize(round, mods)}
       thresh={thresholdFor(difficulty, round, mods.relax)}
       enemyAtk={{ active: enemyAttacks(round), timer: atkTimer, boss: isBossRound(round), enraged, id: enemyAtkId, attacking: phase === "enemy", blocked: atkBlocked }}
-      passives={passives} combos={combos} items={items} itemMode={itemMode}
+      passives={passives} combos={combos} items={items} itemMode={itemMode} foreseen={foreseen}
       onUseItem={useItem} onCancelItem={()=>setItemMode(null)}
       exprDisplay={exprDisplay} exprValue={exprValue}
       onToggleCard={toggleCard}

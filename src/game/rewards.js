@@ -12,7 +12,12 @@ export const PASSIVES = {
   luckyStart: { icon:"🍀", name:"행운의 시작", levels:["시작 숫자 1장을 7~9로", "시작 숫자 2장을 7~9로", "시작 숫자 2장 7~9 + × 보장", "시작 숫자 3장 7~9 + × 보장", "시작 숫자 3장 8~9 + × 보장"] },
   timeExt:    { icon:"⏳", name:"시간 연장",   levels:[1, 2, 3, 4, 5].map(n => `턴 제한 +${n}`) },
   relax:      { icon:"🧭", name:"여유",       levels:[5, 10, 15, 20, 25].map(n => `기준 점수 −${n}%`) },
+  ironWall:   { icon:"🧱", name:"철벽",       levels:[10, 20, 30, 40, 50].map(p => `적의 카드 파괴를 ${p}% 확률로 1장 막음`) },
+  counter:    { icon:"🗡️", name:"반격",       levels:[2, 4, 6, 8, 10].map(p => `적이 공격할 때 적의 현재 HP ${p}% 피해`) },
 };
+// 철벽: 공격 1번에 최대 1장을 확률로 지킴 / 반격: 적 현재 HP 비율 피해 (점수 미포함, 처치 불가)
+export const ironWallChance = lv => 0.1 * (lv || 0);
+export const counterRatio = lv => 0.02 * (lv || 0);
 
 // 조합: 두 패시브가 모두 Lv5면 보상에 등장. 고르면 재료 두 칸이 빠지고 조합이 패시브 칸 1칸을 차지(순 1칸 확보)
 // 효과 = 재료 두 패시브의 Lv5 효과 + 새 능력. 칸이 3칸이라 조합은 최대 2개까지 공존
@@ -21,8 +26,9 @@ export const COMBOS = {
   goldenHand: { icon:"👑", name:"황금 손",         parts:["bigNum", "luckyStart"], desc:"숫자 카드 풀에 10 추가" },
   opMaster:   { icon:"⚡", name:"연산 지배자",     parts:["mulMaster", "opSense"], desc:"연산 카드 풀에 ² 카드 추가 (바로 앞 낱장 숫자를 제곱, 예: 9 ² = 81)" },
   hourglass:  { icon:"⌛", name:"영원의 모래시계", parts:["timeExt", "relax"],     desc:"손패 최대 +1장" },
+  foresight:  { icon:"🔭", name:"예지",           parts:["ironWall", "counter"],  desc:"적 공격 주기 +1턴 · 공격 2턴 전부터 부서질 카드를 미리 표시" },
 };
-const COMBO_FLAGS = { goldenHand: { ten: true }, opMaster: { square: true }, hourglass: { handPlus: 1 } };
+const COMBO_FLAGS = { goldenHand: { ten: true }, opMaster: { square: true }, hourglass: { handPlus: 1 }, foresight: { atkDelay: 1, preview: true } };
 
 // 실제 적용할 효과 = 보유 패시브 + 조합(재료 두 패시브의 Lv5 효과 + 새 능력)
 export function modsFrom(passives, combos = {}) {
